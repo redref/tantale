@@ -19,7 +19,7 @@ install:
     - if [[ $TRAVIS_PYTHON_VERSION == '2.6' ]]; then pip install unittest2; fi
 
 script:
-    - coverage run --source=diamond test.py
+    - coverage run --source=tantale test.py
     - pep8 src setup.py test.py
 
 after_success:

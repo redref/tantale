@@ -17,6 +17,41 @@ group =
 # Pid file
 pid_file = /var/run/tantale.pid
 
+# Maximum number of checks waiting to be processed.
+# When queue is full, new are dropped.
+queue_size = 16384
+
+################################################################################
+### Options for backends
+[threads]
+
+[[Input]]
+enabled = True
+
+################################################################################
+### Options for backends
+[backends]
+
+[[ElasticsearchBackend]]
+
+# python-elasticsearch options
+hosts = ["http://127.0.0.1:9200"]
+use_ssl = False
+verify_certs = False
+ca_certs = ''
+sniffer_timeout = 30
+sniff_on_start = True
+sniff_on_connection_fail = True
+
+# index options
+metric_index = 'metrics'
+index_rotation = 'daily'
+request_timeout = 30
+
+# Backend specific options
+batch = 10 # group checks update by X
+backlog_size = 50 # keep X checks into memory when backend failing (before trim)
+
 ################################################################################
 ### Options for logging
 # for more information on file format syntax:
