@@ -3,22 +3,23 @@ sudo: false
 language: python
 python:
   - "2.7"
-  - "3.4"
-  - "3.5"
+
+env:
+ - TOX_ENV=py27
+ - TOX_ENV=py33
+ - TOX_ENV=py34
+ - TOX_ENV=pep8
 
 cache:
   directories:
     - $HOME/.cache/pip
 
 install:
-    - pip install -r requirements.txt
-    - pip install pep8
+    - pip install tox
     - pip install coveralls
-    - pip install mock
 
 script:
-    - coverage run --source=src/tantale test.py
-    - pep8 src setup.py test.py
+    - tox -e $TOX_ENV
 
 after_success:
     coveralls
