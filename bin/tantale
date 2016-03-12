@@ -2,10 +2,10 @@
 # coding=utf-8
 
 from __future__ import print_function
-
 import os
 import sys
 import configobj
+import socket
 import multiprocessing
 import optparse
 import signal
@@ -16,31 +16,6 @@ import logging.config
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
 if os.path.exists(os.path.join(path, 'tantale', '__init__.py')):
     sys.path.append(path)
-
-
-class DebugFormatter(logging.Formatter):
-
-    def __init__(self, fmt=None):
-        if fmt is None:
-            fmt = ('%(created)s\t' +
-                   '[%(processName)s:%(process)d:%(levelname)s]\t' +
-                   '%(message)s')
-        self.fmt_default = fmt
-        self.fmt_prefix = fmt.replace('%(message)s', '')
-        logging.Formatter.__init__(self, fmt)
-
-    def format(self, record):
-        self._fmt = self.fmt_default
-
-        if record.levelno in [logging.ERROR, logging.CRITICAL]:
-            self._fmt = ''
-            self._fmt += self.fmt_prefix
-            self._fmt += '%(message)s'
-            self._fmt += '\n'
-            self._fmt += self.fmt_prefix
-            self._fmt += '%(pathname)s:%(lineno)d'
-
-        return logging.Formatter.format(self, record)
 
 
 def main():
@@ -115,6 +90,11 @@ def main():
             print("Tantale version %s" % VERSION)
             sys.exit(0)
 
+        if options.foreground:
+            options.skip_pidfile = True
+            options.skip_fork = True
+            options.log_stdout = True
+
         # Initialize Config
         options.configfile = os.path.abspath(options.configfile)
         if os.path.exists(options.configfile):
@@ -126,6 +106,7 @@ def main():
             sys.exit(1)
 
         # Initialize Logging
+        from tantale.utils import DebugFormatter
         log = logging.getLogger('tantale')
 
         if options.log_stdout:
@@ -156,10 +137,9 @@ def main():
         print("Traceback: %s" % traceback.format_exc(), file=sys.stderr)
         sys.exit(1)
 
-    from tantale.server import Server
-
-    # Switch to using the logging system
     try:
+        from tantale.server import Server
+
         # PID MANAGEMENT
         if not options.skip_pidfile:
             # Initialize Pid file
@@ -167,28 +147,25 @@ def main():
                 options.pidfile = str(config['server']['pid_file'])
 
             # Read existing pid file
-            try:
-                pf = open(options.pidfile, 'r')
-                pid = int(pf.read().strip())
-                pf.close()
-            except (IOError, ValueError):
-                pid = None
+            if os.path.isfile(options.pidfile):
+                with open(options.pidfile, 'r') as old_pidfile:
+                    old_pid = old_pidfile.read()
 
-            # Check existing pid file
-            if pid:
-                # Check if pid is real
-                if not os.path.exists(
-                    os.path.join("/proc", str(pid), "cmdline")
-                ):
-                    # Pid is not real
-                    os.unlink(options.pidfile)
-                    pid = None
-                    print("WARN: Bogus pid file was found. I deleted it.",
-                          file=sys.stderr)
-                else:
-                    print("ERROR: Pidfile exists. Server already running?",
-                          file=sys.stderr)
-                    sys.exit(1)
+            # Write pid file
+            try:
+                lockfile = open(options.pidfile, 'w')
+            except IOError as e:
+                log.critical("Failed to write PID file: %s" % e)
+                sys.exit(1)
+
+            try:
+                # Try to get an exclusive lock on the file. This will fail
+                # if another process has the file locked.
+                fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except IOError:
+                log.error(
+                    "ERROR: Unable to lock pidfile. Server already running?")
+                sys.exit(1)
 
             # Get final GIDs
             if options.group is not None:
@@ -203,20 +180,8 @@ def main():
                 uid = pwd.getpwnam(config['server']['user']).pw_uid
 
             # Fix up pid permissions
-            if not options.foreground:
-                # Write pid file
-                pid = str(os.getpid())
-                try:
-                    pf = open(options.pidfile, 'w+')
-                except IOError as e:
-                    print("Failed to write PID file: %s" % (e),
-                          file=sys.stderr)
-                    sys.exit(1)
-                pf.write("%s\n" % pid)
-                pf.close()
-                os.chown(options.pidfile, uid, gid)
-                # Log
-                log.debug("Wrote First PID file: %s" % (options.pidfile))
+            os.chown(options.pidfile, uid, gid)
+            log.debug("Wrote First PID file: %s" % (options.pidfile))
 
         # USER MANAGEMENT
         if not options.skip_change_user:
@@ -248,78 +213,79 @@ def main():
 
         # DAEMONIZE MANAGEMENT
         if not options.skip_fork:
-            # Detatch Process
-            if not options.foreground:
+            # Detach
+            if hasattr(signal, 'SIGHUP'):
+                signal.signal(signal.SIGHUP, signal.SIG_IGN)
+            log.info('Detaching Process.')
+            l_read, l_write = socket.socketpair()
 
-                # Double fork to serverize process
-                log.info('Detaching Process.')
+            # Fork 1
+            try:
+                pid = os.fork()
+                if pid > 0:
+                    l_write.close()
+                    l_status = l_read.recv(1)
 
-                # Fork 1
-                try:
-                    pid = os.fork()
-                    if pid > 0:
-                        # Exit first parent
+                    # Exit first parent
+                    if l_status == 'r':
                         sys.exit(0)
-                except OSError as e:
-                    print("Failed to fork process." % (e), file=sys.stderr)
-                    sys.exit(1)
-                # Decouple from parent environment
-                os.setsid()
-                os.umask(0o022)
-                # Fork 2
-                try:
-                    pid = os.fork()
-                    if pid > 0:
-                        # Exit second paren
-                        sys.exit(0)
-                except OSError as e:
-                    print("Failed to fork process." % (e), file=sys.stderr)
-                    sys.exit(1)
-                # Close file descriptors so that we can detach
-                sys.stdout.close()
-                sys.stderr.close()
-                sys.stdin.close()
-                os.close(0)
-                os.close(1)
-                os.close(2)
-                sys.stdout = open(os.devnull, 'w')
-                sys.stderr = open(os.devnull, 'w')
+                    else:
+                        sys.exit(1)
+            except OSError as e:
+                log.critical("Failed to fork process." % e)
+                sys.exit(1)
+            l_read.close()
+
+            # Decouple from parent environment
+            os.setsid()
+            os.umask(0o022)
+            # Fork 2
+            try:
+                pid = os.fork()
+                if pid > 0:
+                    # Exit second paren
+                    sys.exit(0)
+            except OSError as e:
+                log.critical("Failed to fork process." % e)
+                sys.exit(1)
+
+            # Close file descriptors so that we can detach
+            sys.stdout.close()
+            sys.stderr.close()
+            sys.stdin.close()
+            os.close(0)
+            os.close(1)
+            os.close(2)
+            sys.stdout = open(os.devnull, 'w')
+            sys.stderr = open(os.devnull, 'w')
 
         # PID MANAGEMENT
         if not options.skip_pidfile:
-            # Finish Initialize PID file
-            if not options.foreground:
-                # Write pid file
-                pid = str(os.getpid())
-                try:
-                    pf = open(options.pidfile, 'w+')
-                except IOError as e:
-                    log.error("Failed to write child PID file: %s" % (e))
-                    sys.exit(1)
-                pf.write("%s\n" % pid)
-                pf.close()
-                # Log
-                log.debug("Wrote child PID file: %s" % (options.pidfile))
+            try:
+                lockfile.write("%s" % os.getpid())
+                lockfile.flush()
+            except IOError as e:
+                log.error("Failed to write child PID file: %s" % e)
+                sys.exit(1)
+            log.debug("Wrote child PID file: %s" % (options.pidfile))
 
         # Initialize Server
         server = Server(configfile=options.configfile)
 
-        def sigint_handler(signum, frame):
-            log.info("Signal Received: %d" % (signum))
-            # Delete Pidfile
-            if not options.skip_pidfile and os.path.exists(options.pidfile):
-                os.remove(options.pidfile)
-                # Log
-                log.debug("Removed PID file: %s" % (options.pidfile))
-            for child in multiprocessing.active_children():
-                child.terminate()
-            sys.exit(0)
+        # Run handle
+        def __onInitDone():
+            if not options.skip_fork:
+                l_write.sendall("r")
+                l_write.close()
 
-        # Set the signal handlers
-        signal.signal(signal.SIGINT, sigint_handler)
-        signal.signal(signal.SIGTERM, sigint_handler)
+        server.run(__onInitDone)
 
-        server.run()
+        # PID MANAGEMENT
+        if not options.skip_pidfile and os.path.exists(options.pidfile):
+            os.remove(options.pidfile)
+            log.debug("Removed PID file: %s" % (options.pidfile))
+
+        sys.exit(0)
 
     # Pass the exit up stream rather then handle it as an general exception
     except SystemExit as e:

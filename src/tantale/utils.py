@@ -1,9 +1,37 @@
 # coding=utf-8
 
+from __future__ import print_function
 import sys
 import imp
 import inspect
+import logging
+import logging.config
 from six import string_types
+
+
+class DebugFormatter(logging.Formatter):
+
+    def __init__(self, fmt=None):
+        if fmt is None:
+            fmt = ('%(created)10s\t' +
+                   '%(processName)15s\t%(process)d\t%(levelname)8s\t' +
+                   '%(message)s')
+        self.fmt_default = fmt
+        self.fmt_prefix = fmt.replace('%(message)s', '')
+        logging.Formatter.__init__(self, fmt)
+
+    def format(self, record):
+        self._fmt = self.fmt_default
+
+        if record.levelno in [logging.ERROR, logging.CRITICAL]:
+            self._fmt = ''
+            self._fmt += self.fmt_prefix
+            self._fmt += '%(message)s'
+            self._fmt += '\n'
+            self._fmt += self.fmt_prefix
+            self._fmt += '%(pathname)s:%(lineno)d'
+
+        return logging.Formatter.format(self, record)
 
 
 def str_to_bool(value):

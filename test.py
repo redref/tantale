@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 
+from __future__ import print_function
 import os
 import sys
 import imp
@@ -8,14 +9,20 @@ import optparse
 import logging
 import unittest
 import inspect
+import socket
+import time
+import signal
+from multiprocessing import Process, Manager, Event, active_children
+
+# Fix path
+path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'src')
+sys.path.append(path)
 
 # DaemonTestCase Deps
-try:
-    from tantale.server import Server
-    import signal
-    from multiprocessing import Process, Queue, active_children
-except:
-    pass
+from tantale.utils import DebugFormatter
+from tantale.server import Server
 
 try:
     from mock import ANY, call, MagicMock, Mock, mock_open, patch
@@ -29,7 +36,7 @@ except ImportError:
 
 
 ###############################################################################
-def getTests(mod_name, src=None, class_prefix="internal_"):
+def getTests(mod_name, src=None, class_prefix="internal_", bench=False):
     if src is None:
         src = sys.path
 
@@ -54,6 +61,12 @@ def getTests(mod_name, src=None, class_prefix="internal_"):
             basename[0:4] == 'test'
         ):
             for name, c in inspect.getmembers(mod, inspect.isclass):
+                if name.startswith('Bench'):
+                    if not bench:
+                        continue
+                else:
+                    if bench:
+                        continue
                 if not issubclass(c, unittest.TestCase):
                     continue
                 tests.append(c)
@@ -62,12 +75,14 @@ def getTests(mod_name, src=None, class_prefix="internal_"):
         if os.path.isdir(pathname):
             for f in os.listdir(pathname):
                 if len(f) > 3 and f[-3:] == '.py':
-                    tests.extend(getTests(f[:-3], mod.__path__, class_prefix))
+                    tests.extend(
+                        getTests(f[:-3], mod.__path__, class_prefix, bench))
                 elif (
                     not f.startswith('_') and
                     os.path.isdir(os.path.join(pathname, f))
                 ):
-                    tests.extend(getTests(f, mod.__path__, class_prefix))
+                    tests.extend(
+                        getTests(f, mod.__path__, class_prefix, bench))
     except:
         import traceback
         print("Failed to import module: %s\n %s" % (
@@ -79,51 +94,42 @@ def getTests(mod_name, src=None, class_prefix="internal_"):
 ###############################################################################
 class DaemonTestCase(unittest.TestCase):
     def setUp(self):
-        ready_queue = Queue(maxsize=10)
-        self.mock_queue = Queue()
-        self.daemon_p = Process(
-            target=self.launch, args=(ready_queue, self.mock_queue))
+        self.ready = Event()
+        # Daemon handle
+        self.daemon_p = Process(target=self.launch)
         self.daemon_p.start()
-        while True:
-            r = ready_queue.get()
-            if r == 'input':
+        for i in range(100):
+            if self.ready.is_set():
                 break
+            time.sleep(0.1)
 
-    def launch(self, ready_queue, mock_queue):
+    def launch(self):
         # Initialize Server
         server = Server(
             configfile=os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                'conf/tantale.conf.example'))
+                'conf/tantale.conf.example'),
+            config_adds=getattr(self, 'config', None))
 
-        def sig_handler(signum, frame):
-            for child in active_children():
-                child.terminate()
+        # Run handle
+        def __onInitDone():
+            self.ready.set()
 
-        # Set the signal handlers
-        signal.signal(signal.SIGINT, sig_handler)
-        signal.signal(signal.SIGTERM, sig_handler)
+        server.run(__onInitDone)
 
-        server.run(ready_queue, mock_queue)
-
-    def tearDown(self):
+    def flush(self):
         self.daemon_p.terminate()
+        self.daemon_p.join()
+
+    def connect(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(('127.0.0.1', 2003))
+        return sock
 
 ###############################################################################
 if __name__ == "__main__":
     if setproctitle:
         setproctitle('test.py')
-
-    # Fix path
-    path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        'src')
-    sys.path.append(path)
-
-    # disable normal logging
-    log = logging.getLogger("tantale")
-    log.addHandler(logging.StreamHandler(sys.stderr))
-    log.disabled = True
 
     # Initialize Options
     parser = optparse.OptionParser()
@@ -133,12 +139,35 @@ if __name__ == "__main__":
                       default=1,
                       action="count",
                       help="verbose")
+    parser.add_option("-b",
+                      "--bench",
+                      dest="bench",
+                      default=False,
+                      action="store_true",
+                      help="bench tests (only)")
+    parser.add_option("-l",
+                      "--log",
+                      dest="log",
+                      default=False,
+                      action="store_true",
+                      help="log daemon to stdout (messy with verbose)")
 
     # Parse Command Line Args
     (options, args) = parser.parse_args()
 
+    # disable normal logging
+    log = logging.getLogger("tantale")
+    handler = logging.StreamHandler(sys.stderr)
+    log.addHandler(handler)
+    if options.log:
+        log.setLevel(logging.DEBUG)
+        handler.setFormatter(DebugFormatter())
+        handler.setLevel(logging.DEBUG)
+    else:
+        log.disabled = True
+
     # Load
-    tests = getTests('tantale')
+    tests = getTests('tantale', bench=options.bench)
 
     # Init test
     loaded_tests = []

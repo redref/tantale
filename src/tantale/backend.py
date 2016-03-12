@@ -1,5 +1,6 @@
 # coding=utf-8
 
+from __future__ import print_function
 import logging
 import threading
 import traceback
@@ -21,7 +22,8 @@ class Backend(object):
         #
         self.config = ConfigObj()
         self.config.merge(self.get_default_config())
-        self.config.merge(config)
+        if config:
+            self.config.merge(config)
 
         # error logging throttling
         self.server_error_interval = float(
@@ -50,7 +52,7 @@ class Backend(object):
             'server_error_interval': 120,
         }
 
-    def _process(self, metric):
+    def _process(self, check):
         """
         Decorator for processing with a lock, catching exceptions
         """
@@ -59,16 +61,16 @@ class Backend(object):
         try:
             try:
                 self.lock.acquire()
-                self.process(metric)
+                self.process(check)
             except Exception:
                 self.log.error(traceback.format_exc())
         finally:
             if self.lock.locked():
                 self.lock.release()
 
-    def process(self, metric):
+    def process(self, check):
         """
-        Process a metric
+        Process
         """
         raise NotImplementedError
 
@@ -90,7 +92,7 @@ class Backend(object):
 
     def flush(self):
         """
-        Flush metrics
+        Flush
         """
         pass
 

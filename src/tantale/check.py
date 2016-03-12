@@ -1,6 +1,8 @@
 # coding=utf-8
 
+from __future__ import print_function
 from six import integer_types
+import re
 
 
 class Check(object):
@@ -9,11 +11,11 @@ class Check(object):
     # up storing a large number of objects in the queue waiting for the
     # handlers to flush.
     __slots__ = [
-        'timestamp', 'hostname', 'check', 'status', 'description'
+        'timestamp', 'hostname', 'check', 'status', 'description', 'tags',
     ]
 
-    def __init__(self, timestamp, hostname, check,
-                 status, description, **tags):
+    def __init__(self, timestamp=None, hostname=None, check=None,
+                 status=None, description=None, **tags):
         """
         Create new instance
         """
@@ -42,28 +44,33 @@ class Check(object):
         self.timestamp = timestamp
         self.hostname = hostname
         self.check = check
-        self.status = status
+        self.status = int(status)
         self.description = description
-        self.tags = tags
+        if tags:
+            self.tags = tags
+        else:
+            self.tags = {}
 
     @classmethod
-    def parse(cls, string):
+    def parse(cls, string, log):
         """
         Parse a string and create a check
         """
-        match = re.match(r'^(?P<name>[A-Za-z0-9\.\-_]+)\s+' +
-                         '(?P<value>[0-9\.]+)\s+' +
-                         '(?P<timestamp>[0-9\.]+)(\n?)$',
+        match = re.match(r'^'
+                         '(?P<timestamp>[0-9]+)\s+'
+                         '(?P<hostname>\w+)\s+'
+                         '(?P<check>\w+)\s+'
+                         '(?P<status>[0-3])\s+'
+                         '(?P<description>.*)'
+                         '.*(\n?)$',
                          string)
         try:
             groups = match.groupdict()
-            # TODO: get precision from value string
-            return Metric(groups['name'],
-                          groups['value'],
-                          float(groups['timestamp']))
+            return Check(**groups)
         except:
-            raise DiamondException(
-                "Metric could not be parsed from string: %s." % string)
+            import traceback
+            log.info('CHECK: Error parsing check %s' % string.strip())
+            log.debug('CHECK: %s' % traceback.format_exc())
 
     def __getstate__(self):
         return dict(
@@ -75,28 +82,3 @@ class Check(object):
     def __setstate__(self, state):
         for slot, value in state.items():
             setattr(self, slot, value)
-
-    def __repr__(self):
-        """
-        Return the Metric as a string
-        """
-        # Return formated string
-        return (
-            "%s %s %i\n"
-            % (self.path, self.get_formatted_value(), self.timestamp)
-        )
-
-    def get_formatted_value(self):
-        """
-        Return the Metric value as string
-        """
-        if not isinstance(self.precision, integer_types):
-            log = logging.getLogger('tantale')
-            log.warn('Metric %s does not have a valid precision', self.path)
-            self.precision = 0
-
-        # Set the format string
-        fstring = "%%0.%if" % self.precision
-
-        # Return formated string
-        return fstring % self.value

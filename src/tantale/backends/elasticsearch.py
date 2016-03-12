@@ -1,11 +1,12 @@
 # coding=utf-8
 """
-Send metric to [Elasticsearch] cluster
+Use [Elasticsearch] cluster
 (https://www.elastic.co/products/elasticsearch) using bulk API.
 
 Require python Elastic client 'python-elasticsearch'
 """
 
+from __future__ import print_function
 import json
 from datetime import datetime
 
@@ -34,8 +35,9 @@ class ElasticsearchBackend(Backend):
         self.sniff_on_connection_fail = bool(
             self.config['sniff_on_connection_fail'])
 
-        self.metric_index = self.config['metric_index']
-        self.index_rotation = self.config['index_rotation']
+        self.status_index = self.config['status_index']
+        self.log_index = self.config['log_index']
+        self.log_index_rotation = self.config['log_index_rotation']
         self.request_timeout = int(self.config['request_timeout'])
 
         # Connect
@@ -59,11 +61,12 @@ class ElasticsearchBackend(Backend):
             'sniffer_timeout': 'Elasticsearch client option',
             'sniff_on_start': 'Elasticsearch client option',
             'sniff_on_connection_fail': 'Elasticsearch client option',
-            'metric_index': 'Elasticsearch index to store metrics',
-            'index_rotation': 'Determine index name time suffix'
+            'status_index': 'Elasticsearch index to use',
+            'log_index': 'Elasticsearch index to use',
+            'log_index_rotation': 'Determine index name time suffix'
                               ' (None|"daily"|"hourly")',
             'request_timeout': 'Elasticsearch client option',
-            'batch': 'How many metrics to store before sending',
+            'batch': 'How many checks to store before sending',
             'backlog_size': 'How many checks to keep before trimming',
         })
 
@@ -83,8 +86,9 @@ class ElasticsearchBackend(Backend):
             'sniffer_timeout': 30,
             'sniff_on_start': True,
             'sniff_on_connection_fail': True,
-            'metric_index': 'metrics',
-            'index_rotation': 'daily',
+            'status_index': 'status',
+            'log_index': 'status_logs',
+            'log_index_rotation': 'daily',
             'request_timeout': 30,
             'batch': 1,
             'backlog_size': 50,
@@ -98,19 +102,19 @@ class ElasticsearchBackend(Backend):
         """
         self._close()
 
-    def process(self, metric):
+    def process(self, check):
         """
-        Process a metric by storing it
+        Process a check by storing it in memory
         Trigger sending is batch size reached
         """
         # Append the data to the array as a string
-        self.metrics.append(metric)
-        if len(self.metrics) >= self.batch_size:
+        self.checks.append(check)
+        if len(self.checks) >= self.batch_size:
             self._send()
 
     def flush(self):
         """
-        Flush metrics in queue
+        Flush queue
         """
         self._send()
 
@@ -119,7 +123,21 @@ class ElasticsearchBackend(Backend):
         Try to send all data in buffer.
         """
         requests = []
-        for metric in self.metrics:
+        for check in self.checks:
+            index = self.status_index
+            requests.append(
+                '{"index": {"_index": "%s", "_type": '
+                '"metric", "_id": "%s-%s"}}'
+                % (index, check.hostname, check.check)
+            )
+
+            obj = {}
+            for slot in check.__slots__:
+                obj[slot] = getattr(check, slot)
+
+            requests.append(json.dumps(obj))
+
+            """
             if self.index_rotation == 'daily':
                 index = "%s-%s" % (
                     self.metric_index,
@@ -151,20 +169,21 @@ class ElasticsearchBackend(Backend):
                 '"ttl": %s' % metric.ttl +
                 '}'
             )
+            """
 
         if len(requests) > 0:
             res = self.elasticclient.bulk(
                 "\n".join(requests),
             )
 
-            if res['errors']:
+            if 'errors' in res and res['errors'] != 0:
                 for idx, item in enumerate(res['items']):
                     if 'error' in item['index']:
                         self.log.debug(
                             "ElasticsearchBackend: %s" % repr(item))
                         self.log.debug(
                             "ElasticsearchBackend: "
-                            "Failed source : %s" % repr(self.metrics[idx]))
+                            "Failed source : %s" % repr(self.checks[idx]))
                 self.log.error("ElasticsearchBackend: Errors sending data")
                 raise Exception("Elasticsearch Cluster returned problem")
 
@@ -174,32 +193,33 @@ class ElasticsearchBackend(Backend):
         """
         # Check to see if we have a valid connection. If not, try to connect.
         try:
-            try:
-                if self.elasticclient is None:
-                    self.log.debug("ElasticsearchBackend: not connected. "
-                                   "Reconnecting")
-                    self._connect()
+            if self.elasticclient is None:
+                self.log.debug("ElasticsearchBackend: not connected. "
+                               "Reconnecting")
+                self._connect()
 
-                if self.elasticclient is None:
-                    self.log.debug("ElasticsearchBackend: Reconnect failed")
-                else:
+            if self.elasticclient is None:
+                self.log.debug("ElasticsearchBackend: Reconnect failed")
+            else:
+                try:
                     # Send data
                     self._send_data()
-                    self.metrics = []
-            except Exception:
-                self._throttle_error("ElasticsearchBackend: "
-                                     "Error sending metrics")
+                    self.checks = []
+                except Exception:
+                    import traceback
+                    self._throttle_error("ElasticsearchBackend: "
+                                         "Error sending checks %s" %
+                                         traceback.format_exc())
         finally:
-            if len(self.metrics) >= (
-                    self.batch_size * self.max_backlog_multiplier):
-                trim_offset = (self.batch_size *
-                               self.trim_backlog_multiplier * -1)
+            # self.log.debug("%d checks in queue" % len(self.checks))
+            if len(self.checks) > self.backlog_size:
+                trim_offset = (self.backlog_size * -1 + self.batch_size)
                 self.log.warn('ElasticsearchBackend: Trimming backlog. '
                               'Removing oldest %d and '
-                              'keeping newest %d metrics',
-                              len(self.metrics) - abs(trim_offset),
+                              'keeping newest %d checks',
+                              len(self.checks) - abs(trim_offset),
                               abs(trim_offset))
-                self.metrics = self.metrics[trim_offset:]
+                self.checks = self.checks[trim_offset:]
 
     def _connect(self):
         """
