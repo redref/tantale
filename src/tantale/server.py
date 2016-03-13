@@ -12,8 +12,14 @@ import select
 from multiprocessing import Manager, Process, Queue, active_children
 from six import b as bytes
 
-from tantale.utils import load_backend
+from tantale import config_min
+from tantale.utils import str_to_bool, load_backend
 from tantale.check import Check
+
+try:
+    import SocketServer as socketserver
+except:
+    import socketserver
 
 try:
     from Queue import Full
@@ -42,46 +48,33 @@ class Server(object):
 
     def load_config(self, configfile):
         """
-        Load the full config / merge splitted configs if configured
+        Load the full config
         """
-        configfile = os.path.abspath(configfile)
-        config = configobj.ConfigObj(configfile)
+        config = configobj.ConfigObj(config_min)
+        config.merge(configobj.ConfigObj(os.path.abspath(configfile)))
         if self.config_adds:
             config.merge(configobj.ConfigObj(self.config_adds))
-        config_extension = '.conf'
-
-        # Load up other config files
-        if 'configs' in config:
-            config_extension = config['configs'].get(
-                'extension', config_extension)
-
-        # Check sanity
-        if 'server' not in config:
-            raise Exception('Failed to load config file %s!' % configfile)
-
-        # Load up backends config
-        if 'backends' not in config:
-            config['backends'] = configobj.ConfigObj()
 
         return config
 
     def input(self, check_queue):
         if setproctitle:
-            setproctitle('%s - input' % getproctitle())
+            setproctitle('%s - Input' % getproctitle())
 
         # Open listener
         connections = []
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            s.bind(('', 2003))
+            port = int(self.config['modules']['Input']['port'])
+            s.bind(('', port))
         except socket.error as msg:
-            self.log.critical('INPUT: Socket bind failed.')
+            self.log.critical('Socket bind failed.')
             self.log.debug(traceback.format_exc())
             return
 
         s.listen(1024)
-        self.log.info("INPUT: listen")
+        self.log.info("Listening on %s" % port)
         connections.append(s)
 
         # Signals
@@ -89,7 +82,7 @@ class Server(object):
         connections.append(pipe[0])
 
         def sig_handler(signum, frame):
-            self.log.info("INPUT: %s received" % signum)
+            self.log.debug("%s received" % signum)
             self.running = False
             os.write(pipe[1], bytes('END'))
         signal.signal(signal.SIGINT, sig_handler)
@@ -121,7 +114,7 @@ class Server(object):
                             try:
                                 check_queue.put(line, block=False)
                             except Full:
-                                self.log.error('INPUT: Queue full, dropping')
+                                self.log.error('Queue full, dropping')
                             except (EOFError, IOError):
                                 # Queue died
                                 self.running = False
@@ -143,7 +136,7 @@ class Server(object):
 
     def input_backend(self, check_queue):
         if setproctitle:
-            setproctitle('%s - input backend' % getproctitle())
+            setproctitle('%s - Input_Backend' % getproctitle())
 
         # Ignore signals
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -151,17 +144,16 @@ class Server(object):
 
         # Load backends
         backends = []
-        if 'backend' not in self.config:
-            for backend in self.config['backends']:
-                try:
-                    cls = load_backend(backend)
-                    backends.append(
-                        cls(self.config['backends'].get(backend, None)))
-                except:
-                    self.log.error('Error loading backend %s' % backend)
-                    self.log.debug(traceback.format_exc())
+        for backend in self.config['backends']:
+            try:
+                cls = load_backend(backend)
+                backends.append(
+                    cls(self.config['backends'].get(backend, None)))
+            except:
+                self.log.error('Error loading backend %s' % backend)
+                self.log.debug(traceback.format_exc())
         if len(backends) == 0:
-            self.log.critical('INPUT BACKEND: No available backends')
+            self.log.critical('No available backends')
             return
 
         # Logic
@@ -182,7 +174,67 @@ class Server(object):
                     backend._flush()
                 self.log.debug('Backends flushed')
 
-        self.log.info("INPUT BACKEND: exit")
+        self.log.info("exit")
+
+    def livestatus(self):
+        if setproctitle:
+            setproctitle('%s - Livestatus' % getproctitle())
+
+        # Load backends
+        backends = []
+        for backend in self.config['backends']:
+            try:
+                cls = load_backend(backend)
+                backends.append(
+                    cls(self.config['backends'].get(backend, None)))
+            except:
+                self.log.error('Error loading backend %s' % backend)
+                self.log.debug(traceback.format_exc())
+        if len(backends) == 0:
+            self.log.critical('No available backends')
+            return
+
+        class RequestHandler(socketserver.StreamRequestHandler):
+            def handle(self):
+                while True:
+                    try:
+                        r, w, e = select.select([self.connection], [], [], 300)
+                        if r is not None:
+                            request = ""
+                            while True:
+                                data = self.rfile.readline()
+                                if data is None or data == '':
+                                    break
+                                elif data.strip() == '':
+                                    res = '["a","b","c",20,30]'
+                                    self.wfile.write(
+                                        '200 10          %s' % res)
+                                    self.wfile.flush()
+                                    print(request)
+                                else:
+                                    request += data
+                        else:
+                            # Timeout waiting query
+                            break
+                    except:
+                        break
+
+            def finish(self, *args, **kwargs):
+                try:
+                    super(RequestHandler, self).finish(*args, **kwargs)
+                except:
+                    pass
+
+        class MyThreadingTCPServer(socketserver.ThreadingTCPServer):
+            allow_reuse_address = True
+            timeout = 10
+            request_queue_size = 10000
+
+        port = int(self.config['modules']['Livestatus']['port'])
+        server = MyThreadingTCPServer(('', port), RequestHandler)
+
+        self.log.info('Listening on %s' % port)
+        server.serve_forever()
 
     def spawn(self, process):
         # Signals (get then ignore)
@@ -224,30 +276,43 @@ class Server(object):
         modules = self.config.get('modules', {})
         for module in modules:
             if module == 'Input':
-                # Input check Queue
-                queue_size = int(self.config['server'].get(
-                    'queue_size', 16384))
-                check_queue = l_manager.Queue(maxsize=queue_size)
-                self.log.debug('queue_size: %d', queue_size)
+                if str_to_bool(modules[module]['enabled']):
+                    # Input check Queue
+                    queue_size = int(self.config['server'].get(
+                        'queue_size', 16384))
+                    check_queue = l_manager.Queue(maxsize=queue_size)
+                    self.log.debug('queue_size: %d', queue_size)
 
-                # Backends
-                processes.append(Process(
-                    name="input_backend",
-                    target=self.input_backend,
-                    args=(check_queue,),
-                ))
-                self.spawn(processes[-1])
+                    # Backends
+                    processes.append(Process(
+                        name="Input Backend",
+                        target=self.input_backend,
+                        args=(check_queue,),
+                    ))
+                    self.spawn(processes[-1])
 
-                # Listener
-                processes.append(Process(
-                    name="input",
-                    target=self.input,
-                    args=(check_queue,),
-                ))
-                self.spawn(processes[-1])
+                    # Socket Listener
+                    processes.append(Process(
+                        name="Input",
+                        target=self.input,
+                        args=(check_queue,),
+                    ))
+                    self.spawn(processes[-1])
+            elif module == 'Livestatus':
+                if str_to_bool(modules[module]['enabled']):
+                    # Livestatus
+                    processes.append(Process(
+                        name="Livestatus",
+                        target=self.livestatus,
+                        args=(),
+                    ))
+                    self.spawn(processes[-1])
             else:
                 self.log.error(
-                    'Unknown module %s found in configuration' % thread)
+                    'Unknown module %s found in configuration' % module)
+
+        if len(processes) == 0:
+            self.log.critical('No modules enabled. Quitting')
 
         # We are ready
         _onInitDone()

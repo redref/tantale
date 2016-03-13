@@ -96,6 +96,9 @@ class Backend(object):
         """
         pass
 
+    def _handle(self):
+        return ['TOTO']
+
     def _throttle_error(self, msg, *args, **kwargs):
         """
         Avoids sending errors repeatedly. Waits at least

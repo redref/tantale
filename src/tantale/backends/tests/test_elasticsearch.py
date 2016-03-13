@@ -82,12 +82,12 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
 class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
-        batch_size = 1000
+        self.batch_size = 1000
         self.config = {
             'backends': {
                 'ElasticsearchBackend': {
-                    'batch': batch_size,
-                    'backlog_size': batch_size * 10,
+                    'batch': self.batch_size,
+                    'backlog_size': self.batch_size * 10,
                 }
             },
             'server': {'queue_size': 100000},
@@ -100,7 +100,7 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
 
         start = time.time()
 
-        sock = self.connect()
+        sock = self.get_socket()
         for a in range(how_many):
             timestamp = int(time.time())
             check = "%s localhost test_check 0 test on some special chars" \
@@ -114,11 +114,9 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
 
         # Check call_count
         bulk_calls = ElasticclientMock.get_results()
-        print(len(bulk_calls))
         self.assertTrue(len(bulk_calls) == int(how_many / self.batch_size))
 
         # Check time
-        print(repr(stop - start))
         self.assertTrue(
             (stop - start) < expected_time,
             "Runtime too long (more than %s) - %s secs" %

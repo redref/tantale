@@ -11,6 +11,7 @@ import optparse
 import signal
 import logging
 import logging.config
+import fcntl
 
 # Add src folder (dev file tree)
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -98,7 +99,9 @@ def main():
         # Initialize Config
         options.configfile = os.path.abspath(options.configfile)
         if os.path.exists(options.configfile):
-            config = configobj.ConfigObj(options.configfile)
+            from tantale import config_min
+            config = configobj.ConfigObj(config_min)
+            config.merge(configobj.ConfigObj(options.configfile))
         else:
             print("ERROR: Config file: %s does not exist." % (
                 options.configfile), file=sys.stderr)
@@ -117,9 +120,9 @@ def main():
             log.addHandler(streamHandler)
         else:
             try:
-                logging.config.fileConfig(options.configfile,
-                                          disable_existing_loggers=False)
-            except Exception as e:
+                logging.config.fileConfig(
+                    options.configfile, disable_existing_loggers=False)
+            except:
                 import traceback
                 print("Error occurs when initialize logging: ",
                       file=sys.stderr)
@@ -205,7 +208,7 @@ def main():
                 sys.exit(1)
 
             # Log
-            log.info('Changed UID: %d (%s) GID: %d (%s).' % (
+            log.debug('Changed UID: %d (%s) GID: %d (%s).' % (
                 os.getuid(),
                 config['server']['user'],
                 os.getgid(),
