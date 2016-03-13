@@ -104,7 +104,6 @@ class Server(object):
             except:
                 # Handle "Interrupted system call"
                 break
-
             for sock in r:
                 if sock == s:
                     # New clients

@@ -1,0 +1,8 @@
+[run]
+parallel = True
+concurrency = multiprocessing
+omit =
+    .tox/*
+    *dist-packages*
+    */tests/*
+    test.py

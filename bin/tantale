@@ -15,7 +15,7 @@ import logging.config
 # Add src folder (dev file tree)
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
 if os.path.exists(os.path.join(path, 'tantale', '__init__.py')):
-    sys.path.append(path)
+    sys.path.insert(0, path)
 
 
 def main():

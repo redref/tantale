@@ -8,9 +8,11 @@ Require python Elastic client 'python-elasticsearch'
 
 from __future__ import print_function
 import json
+from six import string_types
 from datetime import datetime
 
 from tantale.backend import Backend
+from tantale.utils import str_to_bool
 
 from elasticsearch.client import Elasticsearch
 
@@ -24,15 +26,18 @@ class ElasticsearchBackend(Backend):
         self.backlog_size = int(self.config['backlog_size'])
 
         # Initialize Elasticsearch client Options
-        self.hosts = self.config['hosts']
+        if isinstance(self.config['hosts'], string_types):
+            self.hosts = [self.config['hosts']]
+        else:
+            self.hosts = self.config['hosts']
 
-        self.use_ssl = bool(self.config['use_ssl'])
-        self.verify_certs = bool(self.config['verify_certs'])
+        self.use_ssl = str_to_bool(self.config['use_ssl'])
+        self.verify_certs = str_to_bool(self.config['verify_certs'])
         self.ca_certs = self.config['ca_certs']
 
         self.sniffer_timeout = int(self.config['sniffer_timeout'])
-        self.sniff_on_start = bool(self.config['sniff_on_start'])
-        self.sniff_on_connection_fail = bool(
+        self.sniff_on_start = str_to_bool(self.config['sniff_on_start'])
+        self.sniff_on_connection_fail = str_to_bool(
             self.config['sniff_on_connection_fail'])
 
         self.status_index = self.config['status_index']
@@ -51,7 +56,8 @@ class ElasticsearchBackend(Backend):
         config = super(ElasticsearchBackend, self).get_default_config_help()
 
         config.update({
-            'hosts': "Elasticsearch cluster front HTTP URL's",
+            'hosts': "Elasticsearch cluster front HTTP URL's "
+                     "(comma separated)",
             'use_ssl': 'Elasticsearch client option :'
                        ' use SSL on HTTP connections',
             'verify_certs': 'Elasticsearch client option :'
@@ -79,11 +85,11 @@ class ElasticsearchBackend(Backend):
         config = super(ElasticsearchBackend, self).get_default_config()
 
         config.update({
-            'hosts': ["http://127.0.0.1:9200"],
+            'hosts': "http://127.0.0.1:9200",
             'use_ssl': False,
             'verify_certs': False,
             'ca_certs': '',
-            'sniffer_timeout': 30,
+            'sniffer_timeout': 10,
             'sniff_on_start': True,
             'sniff_on_connection_fail': True,
             'status_index': 'status',
@@ -241,6 +247,8 @@ class ElasticsearchBackend(Backend):
                            "Elasticsearch cluster %s",
                            repr(self.hosts))
         except Exception as ex:
+            import traceback
+            self.log.debug(traceback.format_exc())
             # Log Error
             self._throttle_error("ElasticsearchBackend: Failed to connect to "
                                  "%s.", ex)

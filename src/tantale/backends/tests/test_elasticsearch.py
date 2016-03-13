@@ -29,33 +29,42 @@ class ElasticclientMock(Mock):
 
     @classmethod
     def get_results(cls):
-        result_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '.test_tmp')
-        res = []
-        with open(result_file, 'r') as f:
-            for line in f.readlines():
-                res.append(json.loads(line))
-        os.unlink(result_file)
-        return res
+        try:
+            result_file = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                '.test_tmp')
+            res = []
+            with open(result_file, 'r') as f:
+                for line in f.readlines():
+                    res.append(json.loads(line))
+            os.unlink(result_file)
+            return res
+        except:
+            return []
 
 
-class ElasticsearchTestCase(DaemonTestCase):
-    def setUp(self):
-        # Improve default config
-        self.config = {'backends': {
-            'ElasticsearchBackend': {'batch': 1}
-        }}
-
+class ElasticsearchBaseTestCase(object):
+    def mocking(self):
         # Mock elasticsearch client
         self.elastic_mod = sys.modules['elasticsearch.client']
         test.Elasticsearch = ElasticclientMock
         sys.modules['elasticsearch.client'] = test
 
+    def unmocking(self):
+        # Unmock
+        sys.modules['elasticsearch.client'] = self.elastic_mod
+
+
+class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
+    def setUp(self):
+        # Improve default config
+        self.config = {'backends': {
+            'ElasticsearchBackend': {'batch': 1}
+        }}
         super(ElasticsearchTestCase, self).setUp()
 
     def test_sendOneCheck(self):
-        sock = self.connect()
+        sock = self.get_socket()
 
         timestamp = int(time.time())
         check = "%s localhost test_check 0 test on some special chars" \
@@ -67,32 +76,22 @@ class ElasticsearchTestCase(DaemonTestCase):
         self.flush()
 
         bulk_calls = ElasticclientMock.get_results()
-        self.assertTrue(len(bulk_calls) == 1)
-
-    def tearDown(self):
-        # Unmock
-        sys.modules['elasticsearch.client'] = self.elastic_mod
+        self.assertTrue(len(bulk_calls) == 1, "Calls: %s" % bulk_calls)
 
 
-class BenchElasticsearchTestCase(DaemonTestCase):
+class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
     def setUp(self):
-        # Improve default config
-        self.batch_size = 1000
+        # Improve default config in setup (before daemon start)
+        batch_size = 1000
         self.config = {
             'backends': {
                 'ElasticsearchBackend': {
-                    'batch': self.batch_size,
-                    'backlog_size': self.batch_size * 10,
+                    'batch': batch_size,
+                    'backlog_size': batch_size * 10,
                 }
             },
             'server': {'queue_size': 100000},
         }
-
-        # Mock elasticsearch client
-        self.elastic_mod = sys.modules['elasticsearch.client']
-        test.Elasticsearch = ElasticclientMock
-        sys.modules['elasticsearch.client'] = test
-
         super(BenchElasticsearchTestCase, self).setUp()
 
     def test_sendFromOne(self):
@@ -124,7 +123,3 @@ class BenchElasticsearchTestCase(DaemonTestCase):
             (stop - start) < expected_time,
             "Runtime too long (more than %s) - %s secs" %
             (expected_time, (stop - start)))
-
-    def tearDown(self):
-        # Unmock
-        sys.modules['elasticsearch.client'] = self.elastic_mod

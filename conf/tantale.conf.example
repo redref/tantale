@@ -35,7 +35,7 @@ enabled = True
 [[ElasticsearchBackend]]
 
 # python-elasticsearch options
-hosts = ["http://127.0.0.1:9200"]
+hosts = http://127.0.0.1:9200
 use_ssl = False
 verify_certs = False
 ca_certs = ''

@@ -18,7 +18,7 @@ from multiprocessing import Process, Manager, Event, active_children
 path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'src')
-sys.path.append(path)
+sys.path.insert(0, path)
 
 # DaemonTestCase Deps
 from tantale.utils import DebugFormatter
@@ -92,10 +92,37 @@ def getTests(mod_name, src=None, class_prefix="internal_", bench=False):
 
 
 ###############################################################################
+class SocketClient(object):
+    def __init__(self, dst):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setblocking(True)
+        self.sock.connect(dst)
+
+    def send(self, msg):
+        totalsent = 0
+        MSGLEN = len(msg)
+        while totalsent < MSGLEN:
+            sent = self.sock.send(msg[totalsent:])
+            if sent == 0:
+                raise RuntimeError("socket connection broken")
+            totalsent = totalsent + sent
+
+    def close(self):
+        # TOFIX - closing too fast after send (test error)
+        time.sleep(0.5)
+        self.sock.shutdown(socket.SHUT_RDWR)
+        self.sock.close()
+
+
 class DaemonTestCase(unittest.TestCase):
+    mock = True
+
     def setUp(self):
-        self.ready = Event()
+        if self.mock and hasattr(self, 'mocking'):
+            self.mocking()
+
         # Daemon handle
+        self.ready = Event()
         self.daemon_p = Process(target=self.launch)
         self.daemon_p.start()
         for i in range(100):
@@ -121,10 +148,12 @@ class DaemonTestCase(unittest.TestCase):
         self.daemon_p.terminate()
         self.daemon_p.join()
 
-    def connect(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(('127.0.0.1', 2003))
-        return sock
+    def get_socket(self):
+        return SocketClient(('127.0.0.1', 2003))
+
+    def tearDown(self):
+        if self.mock and hasattr(self, 'unmocking'):
+            self.unmocking()
 
 ###############################################################################
 if __name__ == "__main__":
@@ -151,6 +180,12 @@ if __name__ == "__main__":
                       default=False,
                       action="store_true",
                       help="log daemon to stdout (messy with verbose)")
+    parser.add_option("-n",
+                      "--no-mock",
+                      dest="nomock",
+                      default=False,
+                      action="store_true",
+                      help="log daemon to stdout (messy with verbose)")
 
     # Parse Command Line Args
     (options, args) = parser.parse_args()
@@ -173,6 +208,8 @@ if __name__ == "__main__":
     loaded_tests = []
     loader = unittest.TestLoader()
     for test in tests:
+        if options.nomock:
+            test.mock = False
         loaded_tests.append(loader.loadTestsFromTestCase(test))
     suite = unittest.TestSuite(loaded_tests)
     results = unittest.TextTestRunner(verbosity=options.verbose).run(suite)
