@@ -194,6 +194,8 @@ class Server(object):
             self.log.critical('No available backends')
             return
 
+        from livestatus.query import Query
+
         class RequestHandler(socketserver.StreamRequestHandler):
             def handle(self):
                 while True:
@@ -204,20 +206,40 @@ class Server(object):
                             while True:
                                 data = self.rfile.readline()
                                 if data is None or data == '':
+                                    # Abnormal - quitting
                                     break
                                 elif data.strip() == '':
-                                    res = '["a","b","c",20,30]'
-                                    self.wfile.write(
-                                        '200 10          %s' % res)
-                                    self.wfile.flush()
-                                    print(request)
+                                    # Empty line - query END - process
+                                    keep = self.handle_query(request)
+                                    if not keep:
+                                        break
                                 else:
+                                    # Append to query
                                     request += data
                         else:
                             # Timeout waiting query
                             break
                     except:
                         break
+
+            def handle_query(self, request):
+                try:
+                    queryobj, limit = Query.parse(self.wfile, request)
+
+                    for backend in backends:
+                        length = backend._query(queryobj)
+
+                        if limit:
+                            if length > limit:
+                                break
+                            limit = limit - length
+
+                    self.wfile.flush()
+                    return queryobj.keepalive
+                except Exception as e:
+                    log = logging.getLogger('tantale')
+                    log.warn(e)
+                    log.debug(traceback.format_exc())
 
             def finish(self, *args, **kwargs):
                 try:

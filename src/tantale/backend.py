@@ -96,8 +96,13 @@ class Backend(object):
         """
         pass
 
-    def _handle(self):
-        return ['TOTO']
+    def _query(self, query):
+        return self.query(query)
+
+    def query(self, query, limit=None):
+        query.results = ['']
+        return
+        raise NotImplementedError
 
     def _throttle_error(self, msg, *args, **kwargs):
         """
