@@ -11,41 +11,31 @@ class Check(object):
     # up storing a large number of objects in the queue waiting for the
     # handlers to flush.
     __slots__ = [
-        'timestamp', 'hostname', 'check', 'status', 'description', 'tags',
+        'type', 'tags', 'id',
+        'timestamp', 'hostname', 'check', 'status', 'output',
+        'performance_data',
     ]
 
     def __init__(self, timestamp=None, hostname=None, check=None,
-                 status=None, description=None, **tags):
+                 status=None, output=None, performance_data=None, **tags):
         """
         Create new instance
         """
-        # If the timestamp isn't an int, then make it one
-        if not isinstance(timestamp, integer_types):
-            try:
-                timestamp = int(timestamp)
-            except ValueError as e:
-                raise Exception("Invalid timestamp when "
-                                "creating new Check "
-                                "%s-%s: %s" % (hostname, check, e))
-
-        # If the status isn't known, then make it one
-        if not isinstance(status, integer_types):
-            try:
-                status = int(status)
-                if status < 0 or status > 3:
-                    raise Exception("Unknown status when "
-                                    "creating new Check "
-                                    "%s-%s: %s" % (hostname, check, e))
-            except ValueError as e:
-                raise Exception("Invalid status when "
-                                "creating new Check "
-                                "%s-%s: %s" % (hostname, check, e))
-
-        self.timestamp = timestamp
-        self.hostname = hostname
-        self.check = check
+        # No Value error here (regexp verify it)
         self.status = int(status)
-        self.description = description
+        self.timestamp = int(timestamp)
+
+        self.hostname = hostname
+        if check == 'Host':
+            self.type = 'host'
+            self.id = hostname
+        else:
+            self.type = 'service'
+            self.id = "%s-%s" % (hostname, check)
+
+        self.check = check
+        self.output = output
+        self.performance_data = performance_data
         if tags:
             self.tags = tags
         else:
@@ -61,7 +51,7 @@ class Check(object):
                          '(?P<hostname>\w+)\s+'
                          '(?P<check>\w+)\s+'
                          '(?P<status>[0-3])\s+'
-                         '(?P<description>.*)'
+                         '(?P<output>.*)'
                          '.*(\n?)$',
                          string)
         try:

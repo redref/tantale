@@ -63,26 +63,32 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         }}
         super(ElasticsearchTestCase, self).setUp()
 
-    def test_sendOneCheck(self):
+    def test_sendOne(self):
         sock = self.get_socket()
 
         timestamp = int(time.time())
-        check = "%s localhost test_check 0 test on some special chars" \
-                " ><&(){}[],;:!\n" % timestamp
-        check = six.b(check)
-        sock.send(check)
+        checks = [
+            "%s localhost Host 0 test funkychars ><&(){}[],;:!\n",
+            "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
+        ]
+        for check in checks:
+            sock.send(six.b(check % timestamp))
 
         sock.close()
         self.flush()
 
         bulk_calls = ElasticclientMock.get_results()
-        self.assertTrue(len(bulk_calls) == 1, "Calls: %s" % bulk_calls)
+        self.assertTrue(
+            len(bulk_calls) == 4,
+            "Calls (%s): %s" % (len(bulk_calls), '\n'.join(bulk_calls)))
+
+        # TOFIX further test
 
 
 class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
-        self.batch_size = 1000
+        self.batch_size = 5000
         self.config = {
             'backends': {
                 'ElasticsearchBackend': {
@@ -96,17 +102,19 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
 
     def test_sendFromOne(self):
         expected_time = float(5)
-        how_many = 50000
+        how_many = 25000
 
         start = time.time()
 
         sock = self.get_socket()
         for a in range(how_many):
             timestamp = int(time.time())
-            check = "%s localhost test_check 0 test on some special chars" \
-                    " ><&(){}[],;:!\n" % timestamp
-            check = six.b(check)
-            sock.send(check)
+            checks = [
+                "%s local%d Host 0 test funkychars ><&(){}[],;:!\n",
+                "%s local%d Service 0 test funkychars ><&(){}[],;:!\n",
+            ]
+            for check in checks:
+                sock.send(six.b(check % (timestamp, a)))
         sock.close()
         self.flush()
 

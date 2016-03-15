@@ -4,6 +4,136 @@ Use [Elasticsearch] cluster
 (https://www.elastic.co/products/elasticsearch) using bulk API.
 
 Require python Elastic client 'python-elasticsearch'
+
+### Setup
+
+Elasticsearch templates :
+
+  * STATUS INDEX :
+
+```
+{
+  "template": "status",
+  "mappings": {
+    "_default_": {
+      "properties": {
+        "downtime": {
+          "type": "long"
+        },
+        "ack": {
+          "type": "long"
+        },
+        "timestamp": {
+          "format": "epoch_second||strict_date_optional_time||epoch_millis",
+          "type": "date"
+        },
+        "hostname": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "check": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "status": {
+          "type": "long"
+        },
+        "output": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "last_check": {
+          "format": "epoch_second||strict_date_optional_time||epoch_millis",
+          "type": "date"
+        },
+        "performance_data": {
+          "properties": {
+            "name": {
+                "index": "not_analyzed",
+                "type": "string"
+            }
+          },
+          "type": "nested"
+        },
+        "tags": {
+          "type": "object"
+        }
+      }
+    },
+    "service": {
+      "_parent": {
+        "type": "host"
+      }
+    }
+  }
+}
+```
+
+  * LOGS INDEX :
+
+```
+{
+  "template": "status_logs-*",
+  "mappings": {
+    "_default_": {
+      "properties": {
+        "timestamp": {
+          "format": "epoch_second||strict_date_optional_time||epoch_millis",
+          "type": "date"
+        },
+        "hostname": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "check": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "status": {
+          "type": "long"
+        },
+        "output": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "performance_data": {
+          "properties": {
+            "name": {
+                "index": "not_analyzed",
+                "type": "string"
+            }
+          },
+          "type": "nested"
+        },
+        "tags": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}
+```
+
+Script to put in /etc/elasticsearch/scripts/tantale.groovy :
+
+```
+ctx._source.last_check = timestamp
+ctx._source.output = output
+
+if (ctx._source.status != status) {
+    ctx._source.status = status
+    ctx._source.timestamp = timestamp
+    ctx._source.output = output
+    if (ctx._source.ack == 1) {
+        if (ctx._source.downtime == 0) {
+            ctx._source.ack = 0
+        }
+    }
+}
+
+```
+
+Help getting update done flag and maintain index performance.
 """
 
 from __future__ import print_function
@@ -130,67 +260,85 @@ class ElasticsearchBackend(Backend):
         """
         requests = []
         for check in self.checks:
-            index = self.status_index
-            requests.append(
-                '{"index": {"_index": "%s", "_type": '
-                '"metric", "_id": "%s-%s"}}'
-                % (index, check.hostname, check.check)
-            )
+            head = {"_type": check.type, "_id": check.id}
+            if check.type == 'service':
+                head['parent'] = check.hostname
+            requests.append(json.dumps({"update": head}))
 
             obj = {}
             for slot in check.__slots__:
-                obj[slot] = getattr(check, slot)
-
-            requests.append(json.dumps(obj))
-
-            """
-            if self.index_rotation == 'daily':
-                index = "%s-%s" % (
-                    self.metric_index,
-                    datetime.fromtimestamp(
-                        metric.timestamp).strftime('%Y.%m.%d')
-                )
-            elif self.index_rotation == 'hourly':
-                index = "%s-%s" % (
-                    self.metric_index,
-                    datetime.fromtimestamp(
-                        metric.timestamp).strftime('%Y.%m.%d.%H')
-                )
-            else:
-                index = self.metric_index
-
-            requests.append(
-                '{"index": {"_index": "%s", "_type": '
-                '"metric", "_id": "%s_%s"}}'
-                % (index, str(metric.timestamp), metric.path)
-            )
-            requests.append(
-                '{' +
-                '"timestamp": %i000, ' % metric.timestamp +
-                '"path": "%s", ' % metric.path +
-                '"value": %s, ' % metric.get_formatted_value() +
-                '"host": "%s", ' % metric.host +
-                '"metric_type": "%s", ' % metric.metric_type +
-                '"raw_value": "%s", ' % str(metric.raw_value) +
-                '"ttl": %s' % metric.ttl +
-                '}'
-            )
-            """
+                if slot not in ('type', 'id'):
+                    obj[slot] = getattr(check, slot, None)
+            obj['timestamp'] = obj['timestamp'] * 1000
+            requests.append(json.dumps({
+                "fields": ["timestamp"], 'upsert': obj,
+                "script": {"file": "tantale", "params": obj}}))
 
         if len(requests) > 0:
             res = self.elasticclient.bulk(
-                "\n".join(requests),
-            )
+                "\n".join(requests), index=self.status_index)
 
             if 'errors' in res and res['errors'] != 0:
                 for idx, item in enumerate(res['items']):
-                    if 'error' in item['index']:
+                    if 'error' in item['update']:
                         self.log.debug(
                             "ElasticsearchBackend: %s" % repr(item))
                         self.log.debug(
                             "ElasticsearchBackend: "
                             "Failed source : %s" % repr(self.checks[idx]))
                 self.log.error("ElasticsearchBackend: Errors sending data")
+                raise Exception("Elasticsearch Cluster returned problem")
+
+            return res['items']
+        else:
+            return None
+
+    def _send_logs(self, res):
+        requests = []
+        for idx, check in enumerate(self.checks):
+            # Logs / Events
+            if self.log_index_rotation == 'daily':
+                index = "%s-%s" % (
+                    self.log_index,
+                    datetime.fromtimestamp(
+                        check.timestamp).strftime('%Y.%m.%d')
+                )
+            elif self.log_index_rotation == 'hourly':
+                index = "%s-%s" % (
+                    self.log_index,
+                    datetime.fromtimestamp(
+                        check.timestamp).strftime('%Y.%m.%d.%H')
+                )
+            else:
+                index = self.log_index
+
+            if (
+                'update' in res[idx] and 'get' in res[idx]['update'] and
+                (check.timestamp * 1000) !=
+                res[idx]['update']['get']['fields']['timestamp'][0]
+            ):
+                head = {"_type": "event", "_id": check.id, "_index": index}
+                requests.append(json.dumps({"index": head}))
+
+                obj = {}
+                for slot in check.__slots__:
+                    if slot not in ('type', 'id'):
+                        obj[slot] = getattr(check, slot, None)
+                obj['timestamp'] = obj['timestamp'] * 1000
+                requests.append(json.dumps(obj))
+
+        if len(requests) > 0:
+            res = self.elasticclient.bulk("\n".join(requests))
+
+            if 'errors' in res and res['errors'] != 0:
+                for idx, item in enumerate(res['items']):
+                    if 'error' in item['update']:
+                        self.log.debug(
+                            "ElasticsearchBackend: %s" % repr(item))
+                        self.log.debug(
+                            "ElasticsearchBackend: "
+                            "Failed source : %s" % repr(self.checks[idx]))
+                self.log.error("ElasticsearchBackend: Errors sending logs")
                 raise Exception("Elasticsearch Cluster returned problem")
 
     def _send(self):
@@ -209,7 +357,12 @@ class ElasticsearchBackend(Backend):
             else:
                 try:
                     # Send data
-                    self._send_data()
+                    res = self._send_data()
+                    if res:
+                        self._send_logs(res)
+                    else:
+                        self.log.info(
+                            'ElasticsearchBackend: no events to send')
                     self.checks = []
                 except Exception:
                     import traceback
