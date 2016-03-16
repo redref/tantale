@@ -252,7 +252,8 @@ class ElasticsearchBackend(Backend):
         """
         Flush queue
         """
-        self._send()
+        if len(self.checks) != 0:
+            self._send()
 
     def _send_data(self):
         """
@@ -278,20 +279,22 @@ class ElasticsearchBackend(Backend):
             res = self.elasticclient.bulk(
                 "\n".join(requests), index=self.status_index)
 
-            if 'errors' in res and res['errors'] != 0:
-                for idx, item in enumerate(res['items']):
-                    if 'error' in item['update']:
-                        self.log.debug(
-                            "ElasticsearchBackend: %s" % repr(item))
-                        self.log.debug(
-                            "ElasticsearchBackend: "
-                            "Failed source : %s" % repr(self.checks[idx]))
-                self.log.error("ElasticsearchBackend: Errors sending data")
-                raise Exception("Elasticsearch Cluster returned problem")
+            if res:
+                if 'errors' in res and res['errors'] != 0:
+                    for idx, item in enumerate(res['items']):
+                        if 'error' in item['update']:
+                            self.log.debug(
+                                "ElasticsearchBackend: %s" % repr(item))
+                            self.log.debug(
+                                "ElasticsearchBackend: "
+                                "Failed source : %s" % repr(self.checks[idx]))
+                    self.log.error("ElasticsearchBackend: Errors sending data")
+                    raise Exception("Elasticsearch Cluster returned problem")
 
-            return res['items']
-        else:
-            return None
+                if 'items' in res:
+                    return res['items']
+
+        return None
 
     def _send_logs(self, res):
         requests = []

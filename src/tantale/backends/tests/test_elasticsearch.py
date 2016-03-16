@@ -16,31 +16,39 @@ from test import unittest, ANY, call, MagicMock, Mock, mock_open, patch
 
 class ElasticclientMock(Mock):
     """ Mock multiprocessing into file - no better idea """
-    def bulk(self, *args, **kwargs):
-        result_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            '.test_tmp')
-        kwargs['args'] = args
-        with open(result_file, 'a') as f:
+    result_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        '.test_tmp')
+
+    def bulk(self, body, **kwargs):
+        lines = int(body.count('\n')) + 1
+        kwargs['body'] = body
+        with open(self.result_file, 'a') as f:
             f.write(json.dumps(kwargs))
             f.write('\n')
             f.flush()
-        return {}
+
+        # At least correct return on _send_data routine / all refreshed
+        timestamp = int(time.time()) * 1000 + 1
+        item = {'update': {'get': {'fields': {'timestamp': [timestamp]}}}}
+        return {
+            'errors': False,
+            'items': [item for i in range(int(lines / 2))]}
 
     @classmethod
     def get_results(cls):
+        res = []
         try:
-            result_file = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                '.test_tmp')
-            res = []
-            with open(result_file, 'r') as f:
+            with open(cls.result_file, 'r') as f:
                 for line in f.readlines():
                     res.append(json.loads(line))
-            os.unlink(result_file)
-            return res
         except:
-            return []
+            pass
+        try:
+            os.unlink(cls.result_file)
+        except:
+            pass
+        return res
 
 
 class ElasticsearchBaseTestCase(object):
@@ -78,9 +86,12 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         self.flush()
 
         bulk_calls = ElasticclientMock.get_results()
-        self.assertTrue(
-            len(bulk_calls) == 4,
-            "Calls (%s): %s" % (len(bulk_calls), '\n'.join(bulk_calls)))
+        wait = 4
+        self.assertEqual(
+            len(bulk_calls), wait,
+            "Calls (%s not %s): %s" % (
+                len(bulk_calls), wait,
+                '\n' + '\n'.join([str(call) for call in bulk_calls])))
 
         # TOFIX further test
 
@@ -88,7 +99,7 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
 class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
-        self.batch_size = 5000
+        self.batch_size = 200
         self.config = {
             'backends': {
                 'ElasticsearchBackend': {
@@ -101,8 +112,8 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         super(BenchElasticsearchTestCase, self).setUp()
 
     def test_sendFromOne(self):
-        expected_time = float(5)
-        how_many = 25000
+        expected_time = float(6)
+        how_many = 20000
 
         start = time.time()
 
@@ -122,7 +133,11 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
 
         # Check call_count
         bulk_calls = ElasticclientMock.get_results()
-        self.assertTrue(len(bulk_calls) == int(how_many / self.batch_size))
+        # 4 times how_many - Host/Service + both events
+        wait = int(how_many / self.batch_size * 4)
+        self.assertEqual(
+            len(bulk_calls), wait,
+            "Calls (%d not %d)" % (len(bulk_calls), wait))
 
         # Check time
         self.assertTrue(

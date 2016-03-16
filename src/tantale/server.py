@@ -194,7 +194,7 @@ class Server(object):
             self.log.critical('No available backends')
             return
 
-        from livestatus.query import Query
+        from tantale.livestatus.query import Query
 
         class RequestHandler(socketserver.StreamRequestHandler):
             def handle(self):
