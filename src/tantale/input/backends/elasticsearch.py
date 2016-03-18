@@ -137,11 +137,12 @@ Help getting update done flag and maintain index performance.
 """
 
 from __future__ import print_function
+
 import json
 from six import string_types
 from datetime import datetime
 
-from tantale.backend import Backend
+from tantale.input.backend import Backend
 from tantale.utils import str_to_bool
 
 from elasticsearch.client import Elasticsearch

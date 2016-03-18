@@ -65,7 +65,7 @@ class ElasticsearchBaseTestCase(object):
 
 class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
     def setUp(self):
-        # Improve default config
+        # Daemon config
         self.config = {'backends': {
             'ElasticsearchBackend': {'batch': 1}
         }}
@@ -93,7 +93,7 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
                 len(bulk_calls), wait,
                 '\n' + '\n'.join([str(call) for call in bulk_calls])))
 
-        # TOFIX further test
+        # TOFIX further test on those results
 
 
 class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):

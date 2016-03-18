@@ -1,6 +1,7 @@
 [run]
 parallel = True
 concurrency = multiprocessing
+source = src/tantale
 omit =
     .tox/*
     *dist-packages*

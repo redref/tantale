@@ -36,7 +36,7 @@ except ImportError:
 
 
 ###############################################################################
-def getTests(mod_name, src=None, class_prefix="internal_", bench=False):
+def getTests(mod_name, src=None, class_prefix="", bench=False):
     if src is None:
         src = sys.path
 
@@ -75,14 +75,16 @@ def getTests(mod_name, src=None, class_prefix="internal_", bench=False):
         if os.path.isdir(pathname):
             for f in os.listdir(pathname):
                 if len(f) > 3 and f[-3:] == '.py':
-                    tests.extend(
-                        getTests(f[:-3], mod.__path__, class_prefix, bench))
+                    tests.extend(getTests(
+                        f[:-3], mod.__path__,
+                        "%s_%s" % (class_prefix, mod_name), bench))
                 elif (
                     not f.startswith('_') and
                     os.path.isdir(os.path.join(pathname, f))
                 ):
-                    tests.extend(
-                        getTests(f, mod.__path__, class_prefix, bench))
+                    tests.extend(getTests(
+                        f, mod.__path__,
+                        "%s_%s" % (class_prefix, mod_name), bench))
     except:
         import traceback
         print("Failed to import module: %s\n %s" % (

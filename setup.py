@@ -54,7 +54,7 @@ setup(
     license='Apache 2.0',
     description='Monitoring API / Backend interfaces',
     package_dir={'': 'src'},
-    packages=['tantale', 'tantale.backends', 'tantale.backends.tests'],
+    packages=['tantale', ],
     scripts=['bin/tantale'],
     data_files=data_files,
     install_requires=install_requires,

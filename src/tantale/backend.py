@@ -1,16 +1,16 @@
 # coding=utf-8
 
 from __future__ import print_function
+
 import logging
 import threading
-import traceback
 from configobj import ConfigObj
 import time
 
 
-class Backend(object):
+class BaseBackend(object):
     """
-    Process metrics received
+    Base class to all backends
     """
 
     def __init__(self, config=None):
@@ -51,58 +51,6 @@ class Backend(object):
             'get_default_config': 'get_default_config',
             'server_error_interval': 120,
         }
-
-    def _process(self, check):
-        """
-        Decorator for processing with a lock, catching exceptions
-        """
-        if not self.enabled:
-            return
-        try:
-            try:
-                self.lock.acquire()
-                self.process(check)
-            except Exception:
-                self.log.error(traceback.format_exc())
-        finally:
-            if self.lock.locked():
-                self.lock.release()
-
-    def process(self, check):
-        """
-        Process
-        """
-        raise NotImplementedError
-
-    def _flush(self):
-        """
-        Decorator for flushing with a lock, catching exceptions
-        """
-        if not self.enabled:
-            return
-        try:
-            try:
-                self.lock.acquire()
-                self.flush()
-            except Exception:
-                self.log.error(traceback.format_exc())
-        finally:
-            if self.lock.locked():
-                self.lock.release()
-
-    def flush(self):
-        """
-        Flush
-        """
-        pass
-
-    def _query(self, query):
-        return self.query(query)
-
-    def query(self, query, limit=None):
-        query.results = ['']
-        return
-        raise NotImplementedError
 
     def _throttle_error(self, msg, *args, **kwargs):
         """
