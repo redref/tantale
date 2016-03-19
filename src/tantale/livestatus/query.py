@@ -1,17 +1,24 @@
 # coding=utf-8
 
+import traceback
+
 # Fields known by tantale
-KNOWN_FIELDS = ('status', 'timestamp', 'host', 'description', 'service', 'ack')
+KNOWN_FIELDS = (
+    'type',
+    'timestamp', 'hostname', 'check', 'status', 'output',
+)
 
 # Static mapping (without object names)
 FIELDS_MAPPING = {
     "state": "status",
-    "name": "host",
-    "address": "host",
+    "name": "hostname",
+    # No address here, only hostnames
+    "address": "hostname",
     "last_state_change": "timestamp",
-    "plugin_output": "description",
-    "description": "service",
+    "plugin_output": "ouput",
+    "description": "check",
     "acknowledged": "ack",
+    "scheduled_downtime_depth": "downtime",
     "last_check": "last_check",
 }
 
@@ -39,6 +46,7 @@ FIELDS_DUMMY = {
     "custom_variables": {},
 }
 
+# Data in status_table / Livestatus visible configuration
 STATUS_TABLE = {
     "livestatus_version": "tantale",
     "program_version": "1.0",
@@ -48,9 +56,9 @@ STATUS_TABLE = {
     "enable_notifications": 0,
     "execute_service_checks": 1,
     "execute_host_checks": 1,
-    "enable_flap_detection": 1,
-    "enable_event_handlers": 1,
-    "process_performance_data": 1,
+    "enable_flap_detection": 0,
+    "enable_event_handlers": 0,
+    "process_performance_data": 0,
 }
 
 
@@ -72,8 +80,6 @@ class Query(object):
         self.method = method
         self.table = table
         self.columns = columns
-        self.filters = filters
-        self.stats = stats
         self.limit = limit
         self.rheader = rheader
         self.oformat = oformat
@@ -83,6 +89,25 @@ class Query(object):
 
         self.results = []
 
+        # Filter None from filters
+        self.filters = []
+        if filters:
+            for filt in filters:
+                if filt:
+                    self.filters.append(filt)
+        if len(self.filters) == 0:
+            self.filters = None
+
+        # Filter None from stats
+        self.stats = []
+        if stats:
+            for stat in stats:
+                if stat:
+                    self.stats.append(stat)
+        if len(self.stats) == 0:
+            self.stats = None
+
+        # Shortcut on status table
         if self.table == "status":
             self.append(STATUS_TABLE)
             self.flush()
@@ -99,30 +124,79 @@ class Query(object):
             setattr(self, slot, value)
 
     def append(self, result):
-        # Mapping fields
-        print(self.columns)
-        mapped_res = []
-        for field in self.columns:
-            mapped_res.append(result.get(field, None))
+        # Mapping back to columns
+        if self.columns:
+            mapped_res = []
+            for field in self.columns:
+                mapped_res.append(result.get(field, None))
 
-        print(mapped_res)
-        self.results.append(mapped_res)
+            self.results.append(mapped_res)
+        else:
+            self.results.append(result)
 
-        if self.oformat == 'csv':
-            self.output_line()
+        if self.oformat == 'csv' and not self.rheader:
+            self._output_line()
 
-    def output_line(self):
-        pass
+    def _output_line(self):
+        raise NotImplementedError
 
     def flush(self):
         if self.rheader == 'fixed16':
             string = str(self.results)
-            print('%3d %11d %s\n' % (200, len(string), string))
             self.output_fd.write(
                 '%3d %11d %s\n' % (200, len(string), string))
         else:
             for result in self.results:
                 self.output_fd.write('%s\n' % ';'.join(result))
+
+    @classmethod
+    def field_map(cls, field, table):
+        if field.startswith("%s_" % table[:-1]):
+            field = field[len(table):]
+
+        # Map parent on service
+        if table == 'services' and field.startswith('host_'):
+            return 'host.%s' % cls.field_map(field[5:], 'hosts')
+
+        if field in FIELDS_MAPPING:
+            return FIELDS_MAPPING[field]
+        elif field in FIELDS_DUMMY:
+            return FIELDS_DUMMY[field]
+        else:
+            raise Exception('Unknown field %s' % field)
+
+    @classmethod
+    def parse_expr(cls, arg_list, table):
+        # TOFIX exclude custom_variable_names / not relevant
+        if arg_list[0].endswith("custom_variable_names"):
+            return None
+
+        # TOFIX for now assume right operand is constant
+        arg_list[0] = cls.field_map(arg_list[0], table)
+
+        # TOFIX
+        if arg_list == [1, '=', '1'] or arg_list == ['host.1', '=', '1']:
+            return None
+
+        if len(arg_list) == 3:
+            arg_list[2] = int(arg_list[2])
+            return arg_list
+        else:
+            raise Exception(
+                "Error parsing expression %s", ' '.join(arg_list))
+
+    @classmethod
+    def combine_expr(cls, operator, expr_list):
+        """ Combine expressions with and/or - filter not defined ones """
+        if None in expr_list:
+            res = []
+            for expr in expr_list:
+                if expr is not None:
+                    res.append(expr)
+            if len(res) == 1:
+                return res
+            expr_list = res
+        return [operator, expr_list]
 
     @classmethod
     def parse(cls, fd, string):
@@ -131,32 +205,73 @@ class Query(object):
         """
         method = None
         table = None
-        optionals = {}
+        options = {}
+
+        print(string)
 
         try:
             for line in string.split('\n'):
                 members = line.split(' ')
                 if members[0] == '':
                     pass
+                # Stats
+                elif members[0] == 'Stats:':
+                    options['stats'] = options.get('stats', [])
+                    options['stats'].append(cls.parse_expr(members[1:], table))
+                elif members[0] == 'StatsAnd:':
+                    nb = int(members[1])
+                    options['stats'][-nb] = cls.combine_expr(
+                        'and', options['stats'][-nb:])
+                    options['stats'] = options['stats'][:-nb + 1]
+                elif members[0] == 'StatsOr:':
+                    nb = int(members[1])
+                    options['stats'][-nb] = cls.combine_expr(
+                        'or', options['stats'][-nb:])
+                    options['stats'] = options['stats'][:-nb + 1]
+                elif members[0] == 'StatsNegate:':
+                    options['stats'][1] = cls.combine_expr(
+                        'not', options['stats'][-1])
+                # Filters
+                elif members[0] == 'Filter:':
+                    options['filters'] = options.get('filters', [])
+                    options['filters'].append(
+                        cls.parse_expr(members[1:], table))
+                elif members[0] == 'And:':
+                    nb = int(members[1])
+                    options['filters'][-nb] = cls.combine_expr(
+                        'and', options['filters'][-nb:])
+                    options['filters'] = options['filters'][:-nb + 1]
+                elif members[0] == 'Or:':
+                    nb = int(members[1])
+                    options['filters'][-nb] = cls.combine_expr(
+                        'or', options['filters'][-nb:])
+                    options['filters'] = options['filters'][:-nb + 1]
+                elif members[0] == 'Negate:':
+                    options['filters'][-1] = cls.combine_expr(
+                        'not', options['filters'][-1])
+                # Method
                 elif members[0] == 'GET':
                     method = 'GET'
                     table = members[1]
+                # Optional lines
                 elif members[0] == 'Columns:':
-                    optionals['columns'] = members[1:]
+                    options['columns'] = members[1:]
                 elif members[0] == 'ResponseHeader:':
-                    optionals['rheader'] = members[1]
+                    options['rheader'] = members[1]
                 elif members[0] == 'KeepAlive:':
                     if members[1] == 'on':
-                        optionals['keepalive'] = True
+                        options['keepalive'] = True
                 elif members[0] == 'OutputFormat:':
-                    optionals['oformat'] = members[1]
+                    options['oformat'] = members[1]
                 elif members[0] == 'Localtime:':
                     pass
                 else:
-                    raise Exception(
-                        'Error parsing line '
-                        '"%s" on query "%s"' % (line, repr(string)))
+                    raise Exception('Unknown command %s' % members[0])
+
+                # print(options)
             return cls(
-                fd, method, table, **optionals), optionals.get('limit', None)
+                fd, method, table, **options), options.get('limit', None)
         except:
-            raise
+            raise Exception(
+                'Error %s\nparsing line "%s" on query "%s"'
+                % (traceback.format_exc(), line, repr(string)))

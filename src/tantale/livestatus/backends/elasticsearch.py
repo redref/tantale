@@ -113,150 +113,108 @@ class ElasticsearchBackend(Backend):
         """
         self._close()
 
-    def process(self, check):
-        """
-        Process a check by storing it in memory
-        Trigger sending is batch size reached
-        """
-        # Append the data to the array as a string
-        self.checks.append(check)
-        if len(self.checks) >= self.batch_size:
-            self._send()
-
-    def flush(self):
-        """
-        Flush queue
-        """
-        if len(self.checks) != 0:
-            self._send()
-
-    def _send_data(self):
-        """
-        Try to send all data in buffer.
-        """
-        requests = []
-        for check in self.checks:
-            head = {"_type": check.type, "_id": check.id}
-            if check.type == 'service':
-                head['parent'] = check.hostname
-            requests.append(json.dumps({"update": head}))
-
-            obj = {}
-            for slot in check.__slots__:
-                if slot not in ('type', 'id'):
-                    obj[slot] = getattr(check, slot, None)
-            obj['timestamp'] = obj['timestamp'] * 1000
-            requests.append(json.dumps({
-                "fields": ["timestamp"], 'upsert': obj,
-                "script": {"file": "tantale", "params": obj}}))
-
-        if len(requests) > 0:
-            res = self.elasticclient.bulk(
-                "\n".join(requests), index=self.status_index)
-
-            if res:
-                if 'errors' in res and res['errors'] != 0:
-                    for idx, item in enumerate(res['items']):
-                        if 'error' in item['update']:
-                            self.log.debug(
-                                "ElasticsearchBackend: %s" % repr(item))
-                            self.log.debug(
-                                "ElasticsearchBackend: "
-                                "Failed source : %s" % repr(self.checks[idx]))
-                    self.log.error("ElasticsearchBackend: Errors sending data")
-                    raise Exception("Elasticsearch Cluster returned problem")
-
-                if 'items' in res:
-                    return res['items']
-
-        return None
-
-    def _send_logs(self, res):
-        requests = []
-        for idx, check in enumerate(self.checks):
-            # Logs / Events
-            if self.log_index_rotation == 'daily':
-                index = "%s-%s" % (
-                    self.log_index,
-                    datetime.fromtimestamp(
-                        check.timestamp).strftime('%Y.%m.%d')
-                )
-            elif self.log_index_rotation == 'hourly':
-                index = "%s-%s" % (
-                    self.log_index,
-                    datetime.fromtimestamp(
-                        check.timestamp).strftime('%Y.%m.%d.%H')
-                )
+    def convert_expr(self, field, operator, value=None):
+        # Bool
+        if value is None:
+            if field in ('and', 'or', 'not'):
+                l = []
+                for expr in operator:
+                    l.append(self.convert_expr(*expr))
+                return {field: l}
             else:
-                index = self.log_index
+                raise Exception('Unknown boolean operator %s' % field)
 
-            if (
-                'update' in res[idx] and 'get' in res[idx]['update'] and
-                (check.timestamp * 1000) !=
-                res[idx]['update']['get']['fields']['timestamp'][0]
-            ):
-                head = {"_type": "event", "_id": check.id, "_index": index}
-                requests.append(json.dumps({"index": head}))
+        # Special cases - null values - not posted in input
+        filt = {}
+        if field in ('downtime', 'ack') and value == 0 and operator == '=':
+            filt = {'or': [
+                {'not': {'exists': {'field': field}}},
+                {'term': {field: value}}
+            ]}
+            return filt
 
-                obj = {}
-                for slot in check.__slots__:
-                    if slot not in ('type', 'id'):
-                        obj[slot] = getattr(check, slot, None)
-                obj['timestamp'] = obj['timestamp'] * 1000
-                requests.append(json.dumps(obj))
+        # Special case - parent field
+        related = False
+        if field.startswith('host.'):
+            related = 'host'
+            field = field[7:]
 
-        if len(requests) > 0:
-            res = self.elasticclient.bulk("\n".join(requests))
+        # Compare
+        filt = {}
+        if operator == "=":
+            filt['term'] = {field: value}
+        elif operator == "!=":
+            filt['not'] = {'term': {field: value}}
+        elif operator == ">":
+            filt['range'] = {field: {"gt": value}}
+        elif operator == ">=":
+            filt['range'] = {field: {"gte": value}}
+        elif operator == "<":
+            filt['range'] = {field: {"gt": value}}
+        elif operator == "<=":
+            filt['range'] = {field: {"gte": value}}
+        else:
+            raise Exception("Unknown operator %s" % operator)
 
-            if 'errors' in res and res['errors'] != 0:
-                for idx, item in enumerate(res['items']):
-                    if 'error' in item['update']:
-                        self.log.debug(
-                            "ElasticsearchBackend: %s" % repr(item))
-                        self.log.debug(
-                            "ElasticsearchBackend: "
-                            "Failed source : %s" % repr(self.checks[idx]))
-                self.log.error("ElasticsearchBackend: Errors sending logs")
-                raise Exception("Elasticsearch Cluster returned problem")
+        # Map back into parent filter
+        if related:
+            filt = {
+                "has_parent": {
+                    "type": related,
+                    "filter": filt
+                }
+            }
 
-    def _send(self):
+        return filt
+
+    def query(self, query):
         """
-        Send data. Queue on error
+        Process a query
         """
-        # Check to see if we have a valid connection. If not, try to connect.
-        try:
-            if self.elasticclient is None:
-                self.log.debug("ElasticsearchBackend: not connected. "
-                               "Reconnecting")
-                self._connect()
+        if query.table == 'services':
+            return self.query_status(query, 'service')
+        elif query.table == 'hosts':
+            return self.query_status(query, 'host')
+        else:
+            raise NotImplementedError
 
-            if self.elasticclient is None:
-                self.log.debug("ElasticsearchBackend: Reconnect failed")
-            else:
-                try:
-                    # Send data
-                    res = self._send_data()
-                    if res:
-                        self._send_logs(res)
-                    else:
-                        self.log.info(
-                            'ElasticsearchBackend: no events to send')
-                    self.checks = []
-                except Exception:
-                    import traceback
-                    self._throttle_error("ElasticsearchBackend: "
-                                         "Error sending checks %s" %
-                                         traceback.format_exc())
-        finally:
-            # self.log.debug("%d checks in queue" % len(self.checks))
-            if len(self.checks) > self.backlog_size:
-                trim_offset = (self.backlog_size * -1 + self.batch_size)
-                self.log.warn('ElasticsearchBackend: Trimming backlog. '
-                              'Removing oldest %d and '
-                              'keeping newest %d checks',
-                              len(self.checks) - abs(trim_offset),
-                              abs(trim_offset))
-                self.checks = self.checks[trim_offset:]
+    def query_status(self, query, qtype):
+        es_meta = {"index": self.status_index}
+        es_query = {'filter': {'and': [{'type': {'value': qtype}}]}}
+
+        if query.filters:
+            for filt in query.filters:
+                es_query['filter']['and'].append(self.convert_expr(*filt))
+
+        if query.stats:
+            es_meta['search_type'] = 'count'
+            body = ""
+            for stat in query.stats:
+                body += json.dumps(es_meta) + "\n"
+                stat_query = es_query.copy()
+                es_query['filter']['and'].append(self.convert_expr(*stat))
+                body += json.dumps(stat_query) + "\n"
+            self.log.debug('Elasticsearch requests :\n%s' % body)
+
+            result = []
+            for response in self.elasticclient.msearch(body)['responses']:
+                self.log.debug('Elasticsearch response :\n%s' % response)
+                result.append(response['hits']['total'])
+            count = 1
+            query.append(result)
+        else:
+            body = json.dumps(es_meta) + "\n"
+            body += json.dumps(es_query) + "\n"
+            self.log.debug('Elasticsearch requests :\n%s' % body)
+
+            count = 0
+            for response in self.elasticclient.msearch(body)['responses']:
+                self.log.debug('Elasticsearch response :\n%s' % response)
+                if 'error' not in response:
+                    query.append(response)
+                    count += 1
+
+        return count
 
     def _connect(self):
         """

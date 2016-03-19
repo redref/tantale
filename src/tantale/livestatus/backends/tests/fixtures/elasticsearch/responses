@@ -1,0 +1,6 @@
+200          31 [['tantale', '1.0', 0, 2, 2]]
+[[1, 0, 0]]
+[]
+[[6, 2, 2]]
+[[0, 1458337157, u'check_all_disks!20%!10%', u'', 1, u'localhost', u'', u'', [], [], [], u'', 0, 1, [], 1, u'', [], [], [], 0, u"DISK CRITIQUE - /sys/kernel/debug/tracing n'est pas accessible: Permission non accord\xe9e", 0.75666666667, 1457984599, u'Disk Space', u'127.0.0.1', 1, u'Disk Space', 1, -1, u'check-host-alive', u'localhost', 0, 2, 1, 0], [0, 1458337257, u'check_ssh', u'', 1, u'localhost', u'', u'', [], [], [], u'', 0, 1, [], 1, u'', [], [], [], 0, u'Connexion refus\xe9e', 0.42333333333, 1457984699, u'SSH', u'127.0.0.1', 1, u'SSH', 1, -1, u'check-host-alive', u'localhost', 0, 2, 1, 0]]
+[]

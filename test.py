@@ -80,7 +80,8 @@ def getTests(mod_name, src=None, class_prefix="", bench=False):
                         "%s_%s" % (class_prefix, mod_name), bench))
                 elif (
                     not f.startswith('_') and
-                    os.path.isdir(os.path.join(pathname, f))
+                    os.path.isdir(os.path.join(pathname, f)) and
+                    os.path.isfile(os.path.join(pathname, f, '__init__.py'))
                 ):
                     tests.extend(getTests(
                         f, mod.__path__,
@@ -108,6 +109,9 @@ class SocketClient(object):
             if sent == 0:
                 raise RuntimeError("socket connection broken")
             totalsent = totalsent + sent
+
+    def recv(self, size):
+        return self.sock.recv(size)
 
     def close(self):
         # TOFIX - closing too fast after send (test error)
@@ -149,11 +153,33 @@ class DaemonTestCase(unittest.TestCase):
     def flush(self):
         self.daemon_p.terminate()
         self.daemon_p.join()
+        self.daemon_p = None
 
-    def get_socket(self):
-        return SocketClient(('127.0.0.1', 2003))
+    def get_socket(self, port=2003):
+        return SocketClient(('127.0.0.1', port))
+
+    def getFixtureDirPath(self):
+        path = os.path.join(
+            os.path.dirname(inspect.getfile(self.__class__)),
+            'fixtures')
+        return path
+
+    def getFixturePath(self, fixture_name):
+        path = os.path.join(self.getFixtureDirPath(),
+                            fixture_name)
+        if not os.access(path, os.R_OK):
+            print("Missing Fixture " + path)
+        return path
+
+    def getFixture(self, path):
+        filepath = self.getFixturePath(path)
+        with open(filepath, 'r') as f:
+            return f.read()
 
     def tearDown(self):
+        if self.daemon_p:
+            self.daemon_p.terminate()
+            self.daemon_p.join()
         if self.mock and hasattr(self, 'unmocking'):
             self.unmocking()
 

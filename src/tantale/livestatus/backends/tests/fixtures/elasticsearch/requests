@@ -1,0 +1,91 @@
+GET status
+Columns: livestatus_version program_version program_start num_hosts num_services
+Localtime: 1458332296
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+GET hosts
+Stats: state >= 0
+Stats: state > 0
+Stats: scheduled_downtime_depth = 0
+StatsAnd: 2
+Stats: state > 0
+Stats: scheduled_downtime_depth = 0
+Stats: acknowledged = 0
+StatsAnd: 3
+Filter: custom_variable_names < _REALNAME
+Localtime: 1458337414
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+GET hosts
+Columns: host_scheduled_downtime_depth host_last_state_change host_pnpgraph_present host_icon_image host_plugin_output host_is_flapping host_in_notification_period host_action_url_expanded host_modified_attributes_list host_downtimes host_filename host_acknowledged host_custom_variable_names host_state host_comments_with_extra_info host_accept_passive_checks host_has_been_checked host_address host_staleness host_notifications_enabled host_active_checks_enabled host_perf_data host_custom_variable_values host_name host_check_command host_notes_url_expanded
+Filter: host_scheduled_downtime_depth = 0
+Filter: host_acknowledged = 0
+Filter: host_state = 0
+Filter: host_has_been_checked = 1
+And: 2
+Negate:
+Filter: host_has_been_checked = 1
+Filter: host_custom_variable_names < _REALNAME
+Localtime: 1458337384
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+GET services
+Stats: state >= 0
+Stats: state > 0
+Stats: scheduled_downtime_depth = 0
+Stats: host_scheduled_downtime_depth = 0
+Stats: host_state = 0
+StatsAnd: 4
+Stats: state > 0
+Stats: scheduled_downtime_depth = 0
+Stats: host_scheduled_downtime_depth = 0
+Stats: acknowledged = 0
+Stats: host_state = 0
+StatsAnd: 5
+Filter: host_custom_variable_names < _REALNAME
+Localtime: 1458337414
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+GET services
+Columns: host_scheduled_downtime_depth service_last_check service_check_command service_icon_image service_notifications_enabled service_host_name service_perf_data service_action_url_expanded service_custom_variable_names service_comments_with_extra_info host_custom_variable_values host_filename service_scheduled_downtime_depth service_accept_passive_checks host_custom_variable_names service_has_been_checked service_notes_url_expanded service_downtimes service_modified_attributes_list service_custom_variable_values service_acknowledged service_plugin_output service_staleness service_last_state_change service_description host_address service_in_notification_period service_service_description service_active_checks_enabled service_pnpgraph_present host_check_command host_name service_is_flapping service_state host_has_been_checked host_state
+Filter: service_state = 0
+Filter: service_has_been_checked = 1
+And: 2
+Negate:
+Filter: service_has_been_checked = 1
+Filter: service_acknowledged = 0
+Filter: service_scheduled_downtime_depth = 0
+Filter: host_scheduled_downtime_depth = 0
+And: 2
+Filter: host_custom_variable_names < _REALNAME
+Filter: host_state = 1
+Filter: host_has_been_checked = 1
+And: 2
+Negate:
+Filter: host_state = 2
+Filter: host_has_been_checked = 1
+And: 2
+Negate:
+Localtime: 1458337384
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+GET log
+Columns: log_state_type log_plugin_output log_comment log_state log_lineno host_name service_description log_time log_type
+Filter: log_time >= 1458322984
+Filter: class = 1
+Filter: class = 3
+Or: 2
+Localtime: 1458337384
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16

@@ -123,7 +123,7 @@ class InputServer(object):
                 pass
 
         s.close()
-        self.log.info("INPUT: exit")
+        self.log.info("Exit")
 
     def input_backend(self, check_queue):
         if setproctitle:
@@ -165,4 +165,4 @@ class InputServer(object):
                     backend._flush()
                 self.log.debug('Backends flushed')
 
-        self.log.info("exit")
+        self.log.info("Exit")

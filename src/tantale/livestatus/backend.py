@@ -25,6 +25,4 @@ class Backend(BaseBackend):
                 self.lock.release()
 
     def query(self, query, limit=None):
-        query.results = ['']
-        return
         raise NotImplementedError

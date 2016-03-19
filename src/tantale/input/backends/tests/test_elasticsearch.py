@@ -4,10 +4,10 @@ from __future__ import print_function
 import os
 import sys
 import test
-import six
 import time
 import sys
 import json
+from six import b as bytes
 
 import test
 from test import DaemonTestCase
@@ -80,7 +80,7 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
             "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
         ]
         for check in checks:
-            sock.send(six.b(check % timestamp))
+            sock.send(bytes(check % timestamp))
 
         sock.close()
         self.flush()
@@ -125,7 +125,7 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
                 "%s local%d Service 0 test funkychars ><&(){}[],;:!\n",
             ]
             for check in checks:
-                sock.send(six.b(check % (timestamp, a)))
+                sock.send(bytes(check % (timestamp, a)))
         sock.close()
         self.flush()
 
