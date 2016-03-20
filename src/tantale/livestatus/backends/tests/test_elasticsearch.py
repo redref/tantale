@@ -73,7 +73,7 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         start = time.time()
 
         # TODO
-        sock.close()
-        self.flush()
+        #sock.close()
+        #self.flush()
 
         stop = time.time()

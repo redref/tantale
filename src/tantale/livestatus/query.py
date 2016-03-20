@@ -1,6 +1,7 @@
 # coding=utf-8
 
 import traceback
+import logging
 from six import b as bytes
 
 # Fields known by tantale
@@ -21,6 +22,7 @@ FIELDS_MAPPING = {
     "acknowledged": "ack",
     "scheduled_downtime_depth": "downtime",
     "last_check": "last_check",
+    "log_time": "timestamp",
 }
 
 # Default values / Unwired logics
@@ -123,7 +125,7 @@ class Query(object):
         # Shortcut on status table
         if self.table == "status":
             self.append(STATUS_TABLE)
-            self._flush()
+            return
 
         for backend in backends:
             length = backend._query(self)
@@ -154,11 +156,11 @@ class Query(object):
         if self.rheader == 'fixed16':
             string = str(self.results)
             self.output_fd.write(
-                bytes('%3d %11d %s\n' % (200, len(string), string)))
+                bytes('%3d %11d %s\n' % (200, len(string) + 1, string)))
         else:
+            print('NOT USED')
             for result in self.results:
                 self.output_fd.write(bytes('%s\n' % ';'.join(result)))
-        self.output_fd.flush()
 
     @classmethod
     def field_map(cls, field, table):
@@ -218,7 +220,8 @@ class Query(object):
         table = None
         options = {}
 
-        print(string)
+        log = logging.getLogger('tantale')
+        log.debug("Livestatus query :\n%s" % string)
 
         try:
             for line in string.split('\n'):

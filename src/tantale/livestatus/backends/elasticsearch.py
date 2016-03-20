@@ -137,7 +137,7 @@ class ElasticsearchBackend(Backend):
         related = False
         if field.startswith('host.'):
             related = 'host'
-            field = field[7:]
+            field = field[5:]
 
         # Compare
         filt = {}
@@ -175,6 +175,7 @@ class ElasticsearchBackend(Backend):
             return self.query_status(query, 'service')
         elif query.table == 'hosts':
             return self.query_status(query, 'host')
+        #eli
         else:
             raise NotImplementedError
 

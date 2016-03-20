@@ -117,15 +117,11 @@ class LivestatusServer(object):
                         break
 
             def handle_query(self, request):
-                try:
-                    queryobj = Query.parse(self.wfile, request)
-                    queryobj._query(backends)
-                    queryobj._flush()
-                    return queryobj.keepalive
-                except Exception as e:
-                    log = logging.getLogger('tantale')
-                    log.warn(e)
-                    log.debug(traceback.format_exc())
+                queryobj = Query.parse(self.wfile, request)
+                queryobj._query(backends)
+                queryobj._flush()
+                self.wfile.flush()
+                return queryobj.keepalive
 
             def finish(self, *args, **kwargs):
                 try:
