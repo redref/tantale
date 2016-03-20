@@ -175,7 +175,8 @@ class ElasticsearchBackend(Backend):
             return self.query_status(query, 'service')
         elif query.table == 'hosts':
             return self.query_status(query, 'host')
-        #eli
+        elif query.table == 'log':
+            return self.query_logs(query)
         else:
             raise NotImplementedError
 
@@ -204,16 +205,76 @@ class ElasticsearchBackend(Backend):
             count = 1
             query.append(result)
         else:
+            es_query['size'] = query.limit
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
 
-            count = 0
+            response = self.elasticclient.msearch(body)['responses'][0]
+            self.log.debug('Elasticsearch response :\n%s' % response)
+            if 'error' in response:
+                return 0
+            count = response['hits']['total']
+            for hit in response['hits']['hits']:
+                query.append(response)
+
+        return count
+
+    def query_logs(self, query):
+        """
+        # Logs / Events
+        if self.log_index_rotation == 'daily':
+            index = "%s-%s" % (
+                self.log_index,
+                datetime.fromtimestamp(
+                    check.timestamp).strftime('%Y.%m.%d')
+            )
+        elif self.log_index_rotation == 'hourly':
+            index = "%s-%s" % (
+                self.log_index,
+                datetime.fromtimestamp(
+                    check.timestamp).strftime('%Y.%m.%d.%H')
+            )
+        else:
+            index = self.log_index
+        """
+        # Catch
+
+        es_meta = {"index": "%s-*" % self.log_index}
+        es_query = {'filter': {'and': [{'type': {'value': 'event'}}]}}
+
+        if query.filters:
+            for filt in query.filters:
+                es_query['filter']['and'].append(self.convert_expr(*filt))
+
+        if query.stats:
+            es_meta['search_type'] = 'count'
+            body = ""
+            for stat in query.stats:
+                body += json.dumps(es_meta) + "\n"
+                stat_query = es_query.copy()
+                es_query['filter']['and'].append(self.convert_expr(*stat))
+                body += json.dumps(stat_query) + "\n"
+            self.log.debug('Elasticsearch requests :\n%s' % body)
+
+            result = []
             for response in self.elasticclient.msearch(body)['responses']:
                 self.log.debug('Elasticsearch response :\n%s' % response)
-                if 'error' not in response:
-                    query.append(response)
-                    count += 1
+                result.append(response['hits']['total'])
+            count = 1
+            query.append(result)
+        else:
+            body = json.dumps(es_meta) + "\n"
+            body += json.dumps(es_query) + "\n"
+            self.log.debug('Elasticsearch requests :\n%s' % body)
+
+            response = self.elasticclient.msearch(body)['responses'][0]
+            self.log.debug('Elasticsearch response :\n%s' % response)
+            if 'error' in response:
+                return 0
+            count = response['hits']['total']
+            for hit in response['hits']['hits']:
+                query.append(response)
 
         return count
 

@@ -22,7 +22,7 @@ FIELDS_MAPPING = {
     "acknowledged": "ack",
     "scheduled_downtime_depth": "downtime",
     "last_check": "last_check",
-    "log_time": "timestamp",
+    "time": "timestamp",
 }
 
 # Default values / Unwired logics
@@ -47,6 +47,7 @@ FIELDS_DUMMY = {
     "latency": 0,
     "execution_time": 0,
     "custom_variables": {},
+    "class": 1
 }
 
 # Data in status_table / Livestatus visible configuration
@@ -166,29 +167,37 @@ class Query(object):
     def field_map(cls, field, table):
         if field.startswith("%s_" % table[:-1]):
             field = field[len(table):]
+        # Log got no final 's'
+        if field.startswith("log_"):
+            field = field[4:]
 
         # Map parent on service
         if table == 'services' and field.startswith('host_'):
-            return 'host.%s' % cls.field_map(field[5:], 'hosts')
+            mapped = cls.field_map(field[5:], 'hosts')
+            if mapped:
+                return 'host.%s' % mapped
+            else:
+                return None
 
         if field in FIELDS_MAPPING:
             return FIELDS_MAPPING[field]
         elif field in FIELDS_DUMMY:
-            return FIELDS_DUMMY[field]
+            # Handle not wired fields
+            return None
         else:
             raise Exception('Unknown field %s' % field)
 
     @classmethod
     def parse_expr(cls, arg_list, table):
         # TOFIX exclude custom_variable_names / not relevant
+        # TOFIX for now assume right operand is constant
         if arg_list[0].endswith("custom_variable_names"):
             return None
 
-        # TOFIX for now assume right operand is constant
         arg_list[0] = cls.field_map(arg_list[0], table)
 
-        # TOFIX
-        if arg_list == [1, '=', '1'] or arg_list == ['host.1', '=', '1']:
+        # Not wired filters
+        if arg_list[0] is None:
             return None
 
         if len(arg_list) == 3:
@@ -208,6 +217,8 @@ class Query(object):
                     res.append(expr)
             if len(res) == 1:
                 return res
+            if len(res) == 0:
+                return None
             expr_list = res
         return [operator, expr_list]
 
