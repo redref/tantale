@@ -8,6 +8,8 @@ import traceback
 import logging
 
 import select
+import socket
+import errno
 
 from tantale.utils import load_class
 from tantale.livestatus.query import Query
@@ -16,6 +18,11 @@ try:
     import SocketServer as socketserver
 except:
     import socketserver
+
+try:
+    ConnectionResetError
+except:
+    ConnectionResetError = None
 
 try:
     from setproctitle import setproctitle, getproctitle
@@ -68,15 +75,23 @@ class LivestatusServer(object):
 
         class RequestHandler(socketserver.StreamRequestHandler):
             def handle(self):
-                while True:
+                run = True
+                while run:
                     try:
                         r, w, e = select.select([self.connection], [], [], 300)
                         if r is not None:
                             request = ""
                             while True:
-                                data = self.rfile.readline()
+                                data = self.rfile.readline().decode("utf-8")
                                 if data is None or data == '':
-                                    # Abnormal - quitting
+                                    # Abnormal - closing thread
+                                    run = False
+                                    try:
+                                        self.connection.shutdown(
+                                            socket.SHUT_RDWR)
+                                        self.connection.close()
+                                    except:
+                                        pass
                                     break
                                 elif data.strip() == '':
                                     # Empty line - query END - process
@@ -91,29 +106,21 @@ class LivestatusServer(object):
                         else:
                             # Timeout waiting query
                             break
-                    except:
-                        log = logging.getLogger('tantale')
-                        log.debug(
-                            "Client got : %s" % traceback.format_exc())
+
+                    except ConnectionResetError:
+                        break
+                    except socket.error as e:
+                        if e.errno != errno.ECONNRESET:
+                            log = logging.getLogger('tantale')
+                            log.debug(
+                                "Client got : %s" % traceback.format_exc())
                         break
 
             def handle_query(self, request):
                 try:
-                    queryobj, limit = Query.parse(self.wfile, request)
-                    if queryobj.table == 'status':
-                        self.wfile.flush()
-                        return
-
-                    for backend in backends:
-                        length = backend._query(queryobj)
-
-                        if limit:
-                            if length > limit:
-                                break
-                            limit = limit - length
-
-                    queryobj.flush()
-                    self.wfile.flush()
+                    queryobj = Query.parse(self.wfile, request)
+                    queryobj._query(backends)
+                    queryobj._flush()
                     return queryobj.keepalive
                 except Exception as e:
                     log = logging.getLogger('tantale')

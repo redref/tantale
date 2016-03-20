@@ -1,6 +1,7 @@
 # coding=utf-8
 
 import traceback
+from six import b as bytes
 
 # Fields known by tantale
 KNOWN_FIELDS = (
@@ -107,11 +108,6 @@ class Query(object):
         if len(self.stats) == 0:
             self.stats = None
 
-        # Shortcut on status table
-        if self.table == "status":
-            self.append(STATUS_TABLE)
-            self.flush()
-
     def __getstate__(self):
         return dict(
             (slot, getattr(self, slot))
@@ -122,6 +118,20 @@ class Query(object):
     def __setstate__(self, state):
         for slot, value in state.items():
             setattr(self, slot, value)
+
+    def _query(self, backends):
+        # Shortcut on status table
+        if self.table == "status":
+            self.append(STATUS_TABLE)
+            self._flush()
+
+        for backend in backends:
+            length = backend._query(self)
+
+            if self.limit:
+                if length > self.limit:
+                    break
+                self.limit -= length
 
     def append(self, result):
         # Mapping back to columns
@@ -140,14 +150,15 @@ class Query(object):
     def _output_line(self):
         raise NotImplementedError
 
-    def flush(self):
+    def _flush(self):
         if self.rheader == 'fixed16':
             string = str(self.results)
             self.output_fd.write(
-                '%3d %11d %s\n' % (200, len(string), string))
+                bytes('%3d %11d %s\n' % (200, len(string), string)))
         else:
             for result in self.results:
-                self.output_fd.write('%s\n' % ';'.join(result))
+                self.output_fd.write(bytes('%s\n' % ';'.join(result)))
+        self.output_fd.flush()
 
     @classmethod
     def field_map(cls, field, table):
@@ -269,8 +280,7 @@ class Query(object):
                     raise Exception('Unknown command %s' % members[0])
 
                 # print(options)
-            return cls(
-                fd, method, table, **options), options.get('limit', None)
+            return cls(fd, method, table, **options)
         except:
             raise Exception(
                 'Error %s\nparsing line "%s" on query "%s"'

@@ -52,7 +52,7 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         for line in requests.split('\n'):
             sock.send(bytes(line + '\n'))
             if line == '':
-                res += sock.recv(4096)
+                res += sock.recv(4096).decode("utf-8")
 
         sock.close()
         self.flush()

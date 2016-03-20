@@ -112,7 +112,7 @@ class InputServer(object):
                                 queue_state = False
                                 break
                     except:
-                        traceback.print_exc()
+                        self.log.debug(traceback.format_exc())
                         connections.remove(sock)
 
         # Stop backend
