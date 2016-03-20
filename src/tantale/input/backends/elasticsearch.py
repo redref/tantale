@@ -125,9 +125,7 @@ if (ctx._source.status != status) {
     ctx._source.timestamp = timestamp
     ctx._source.output = output
     if (ctx._source.ack == 1) {
-        if (ctx._source.downtime == 0) {
-            ctx._source.ack = 0
-        }
+        ctx._source.ack = 0
     }
 }
 
@@ -400,15 +398,15 @@ class ElasticsearchBackend(Backend):
                 sniff_on_connection_fail=self.sniff_on_connection_fail,
             )
             # Log
-            self.log.debug("ElasticsearchBackend: Established connection to "
-                           "Elasticsearch cluster %s",
-                           repr(self.hosts))
-        except Exception as ex:
-            import traceback
-            self.log.debug(traceback.format_exc())
+            self.log.info(
+                "ElasticsearchBackend: Established connection to "
+                "Elasticsearch cluster %s" % repr(self.hosts))
+        except:
             # Log Error
-            self._throttle_error("ElasticsearchBackend: Failed to connect to "
-                                 "%s.", ex)
+            self._throttle_error("ElasticsearchBackend: Failed to connect")
+            import traceback
+            self.log.debug(
+                "Connection error stack :\n%s" % traceback.format_exc())
             # Close Socket
             self._close()
             return

@@ -24,6 +24,9 @@ class ElasticclientMock(Mock):
         self.fixture[self.fixture.index('\n') + 1:]
         return json.loads(line)
 
+    def update(self, **kwargs):
+        pass
+
 
 class ElasticsearchBaseTestCase(object):
     def mocking(self):
@@ -50,13 +53,15 @@ class ElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         res = ""
         requests = self.getFixture('elasticsearch/requests')
         for line in requests.split('\n'):
-            sock.send(bytes(line + '\n'))
-            if line == '':
+            if line == 'RECV':
                 res += sock.recv(4096).decode("utf-8")
+            else:
+                sock.send(bytes(line + '\n'))
 
         sock.close()
         self.flush()
 
+        self.maxDiff = None
         self.assertEqual(res, self.getFixture('elasticsearch/responses'))
 
 

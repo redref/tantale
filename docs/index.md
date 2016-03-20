@@ -1,25 +1,54 @@
-# Tantale
-
 [![Build Status](https://travis-ci.org/redref/tantale.svg?branch=master)](https://travis-ci.org/redref/tantale) [![Coverage Status](https://coveralls.io/repos/github/redref/tantale/badge.svg?branch=master)](https://coveralls.io/github/redref/tantale?branch=master)
 
-## Overview
+# Tantale
 
-Home-brewed project to join Livestatus compatible GUI's to modern database possibilities.
+Tantale intend to be a monitoring tool which interact with third party monitoring GUI's and tools.
 
-Got this idea googling about monitoring GUI's handling custom backends, and did'nt find anything suitable.
+Assumptions:
+  * configuration already on configuration-management tools
+  * livestatus schema is quite complicated (and never used ?)
+  * mainly passive checks
 
-Guidelines
-  * keep it simple - each funtionnality must remain REALLY understandable
-  * ...
+Tantale store all checks/statuses (hosts/services/...) into database backend (only elasticsearch for now) in order to by fully interoperable.
 
-Project objectives are first
-  * livestatus socket : get query, translate it into DB query (with abstraction on backends)
-  * elasticsearch backend
-  * checks socket : receive checks results, store into DB
+Objective is to provide a Livestatus API keeping interoperability in mind.
 
-Then, ideas :
-  * poller thread : handle active checks, main objective is passive based
-  * checks socket : process notifications / plugins / ...
+Some cons:
+  * get monitoring events onto grafana/kibana
+  * no nagios/shinken daemon restart
+  * let backend handle replication and high availability
+  * configuration-less supervision
+
+My guidelines are:
+  * keep every sub-processes autonomous (and simple)
+
+> Home-brewed tool for now.
+
+## Interfaces
+
+### Livestatus
+
+Livestatus sub-process listen to livestatus queries (port 6557 by default), then parse it over one or mutliple backends, then return results.
+
+Database schema is quite simplified then livestatus API is quite truncated. 
+
+>Support:
+>  * hosts/services/log tables
+>  * acknowledge/downtime
+
+### Input (Custom socket line protocol)
+
+### Nagios_Input (Nagios formatted checks results from a file)
+
+> Not implemented yet
+
+Also compliant with check-mk output format (same as nagios).
+
+### Poller - needed ?
+
+> Not implemented yet
+
+For now, active poller may be delegated to shinken/nagios
 
 ## Inspirations
 

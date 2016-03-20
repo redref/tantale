@@ -173,7 +173,17 @@ class ElasticsearchBackend(Backend):
         """
         Process a query
         """
-        if query.table == 'services':
+        if self.elasticclient is None:
+                self.log.debug("ElasticsearchBackend: not connected. "
+                               "Reconnecting")
+                self._connect()
+        if self.elasticclient is None:
+            self.log.info("ElasticsearchBackend: Reconnect failed")
+            return 0
+
+        if query.method in ('ack', 'downtime'):
+            self.update_query(query)
+        elif query.table == 'services':
             return self.query_status(query, 'service')
         elif query.table == 'hosts':
             return self.query_status(query, 'host')
@@ -184,67 +194,13 @@ class ElasticsearchBackend(Backend):
 
     def query_status(self, query, qtype):
         es_meta = {"index": self.status_index, 'type': qtype}
-        es_query = {'filter': {'and': []}}
-
-        if query.filters:
-            for filt in query.filters:
-                es_query['filter']['and'].append(self.convert_expr(*filt))
-
-        if query.stats:
-            es_meta['search_type'] = 'count'
-            body = ""
-            for stat in query.stats:
-                body += json.dumps(es_meta) + "\n"
-                stat_query = copy.deepcopy(es_query)
-                stat_query['filter']['and'].append(self.convert_expr(*stat))
-                body += json.dumps(stat_query) + "\n"
-            self.log.debug('Elasticsearch requests :\n%s' % body)
-
-            result = []
-            for response in self.elasticclient.msearch(body)['responses']:
-                # self.log.debug('Elasticsearch response :\n%s' % response)
-                result.append(response['hits']['total'])
-            count = 1
-            query.append(result)
-        else:
-            if query.limit:
-                es_query['size'] = query.limit
-            body = json.dumps(es_meta) + "\n"
-            body += json.dumps(es_query) + "\n"
-            self.log.debug('Elasticsearch requests :\n%s' % body)
-
-            response = self.elasticclient.msearch(body)['responses'][0]
-            # self.log.debug('Elasticsearch response :\n%s' % response)
-            if 'error' in response:
-                # Handle empty result
-                return 0
-            count = response['hits']['total']
-            for hit in response['hits']['hits']:
-                query.append(hit['_source'])
-
-        return count
+        return self.search_query(query, es_meta)
 
     def query_logs(self, query):
-        """
-        # Logs / Events
-        if self.log_index_rotation == 'daily':
-            index = "%s-%s" % (
-                self.log_index,
-                datetime.fromtimestamp(
-                    check.timestamp).strftime('%Y.%m.%d')
-            )
-        elif self.log_index_rotation == 'hourly':
-            index = "%s-%s" % (
-                self.log_index,
-                datetime.fromtimestamp(
-                    check.timestamp).strftime('%Y.%m.%d.%H')
-            )
-        else:
-            index = self.log_index
-        """
-        # Catch
-
         es_meta = {"index": "%s-*" % self.log_index, '_type': 'event'}
+        return self.search_query(query, es_meta)
+
+    def search_query(self, query, es_meta):
         es_query = {'filter': {'and': []}}
 
         if query.filters:
@@ -263,13 +219,16 @@ class ElasticsearchBackend(Backend):
 
             result = []
             for response in self.elasticclient.msearch(body)['responses']:
-                # self.log.debug('Elasticsearch response :\n%s' % response)
+                # DEBUG : usefull lines
+                # self.log.debug(
+                #     'Elasticsearch response 1rst line :\n%s' % response)
                 result.append(response['hits']['total'])
             count = 1
             query.append(result)
         else:
-            if query.limit:
-                es_query['size'] = query.limit
+            # DEBUG : comment both next lines to limit results to 5
+            # if query.limit:
+            #     es_query['size'] = query.limit
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
@@ -284,6 +243,19 @@ class ElasticsearchBackend(Backend):
                 query.append(hit['_source'])
 
         return count
+
+    def update_query(self, query):
+        command = {"doc": {query.method: 1}}
+        kwargs = {
+            'index': self.status_index,
+            'body': json.dumps(command),
+            'doc_type': query.table,
+            'id': query.columns[0],
+        }
+        if query.table == 'service':
+            kwargs['parent'] = query.columns[1]
+        response = self.elasticclient.update(**kwargs)
+        self.log.debug('Elasticsearch response :\n%s' % response)
 
     def _connect(self):
         """
@@ -301,15 +273,15 @@ class ElasticsearchBackend(Backend):
                 sniff_on_connection_fail=self.sniff_on_connection_fail,
             )
             # Log
-            self.log.debug("ElasticsearchBackend: Established connection to "
-                           "Elasticsearch cluster %s",
-                           repr(self.hosts))
-        except Exception as ex:
-            import traceback
-            self.log.debug(traceback.format_exc())
+            self.log.info(
+                "ElasticsearchBackend: Established connection to "
+                "Elasticsearch cluster %s" % repr(self.hosts))
+        except:
             # Log Error
-            self._throttle_error("ElasticsearchBackend: Failed to connect to "
-                                 "%s.", ex)
+            self._throttle_error("ElasticsearchBackend: Failed to connect")
+            import traceback
+            self.log.debug(
+                "Connection error stack :\n%s" % traceback.format_exc())
             # Close Socket
             self._close()
             return

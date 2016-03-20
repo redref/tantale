@@ -135,7 +135,7 @@ class Query(object):
         for backend in backends:
             length = backend._query(self)
 
-            if self.limit:
+            if length and self.limit:
                 if length > self.limit:
                     break
                 self.limit -= length
@@ -162,7 +162,12 @@ class Query(object):
                 elif field in FIELDS_MAPPING:
                     map_name = FIELDS_MAPPING[field]
                 elif field in FIELDS_DUMMY:
-                    map_name = FIELDS_DUMMY[field]
+                    mapped_res.append(FIELDS_DUMMY[field])
+                    continue
+
+                # DEBUG : usefull lines
+                # if len(self.results) == 0:
+                #     print(field + " => " + str(map_name))
 
                 # Append
                 if map_name:
@@ -173,7 +178,8 @@ class Query(object):
                         else:
                             res = ''
                     else:
-                        if map_name in ('timestamp'):
+                        if map_name in ('timestamp', 'last_check'):
+                            # TOFIX : this is part of elasticsearch
                             res = int(res / 1000)
                     mapped_res.append(res)
                 else:
@@ -196,9 +202,10 @@ class Query(object):
             self.output_fd.write(
                 bytes('%3d %11d %s\n' % (200, len(string) + 1, string)))
         else:
-            print('NOT USED')
-            for result in self.results:
-                self.output_fd.write(bytes('%s\n' % ';'.join(result)))
+            if len(self.results) > 0:
+                raise NotImplementedError
+                # for result in self.results:
+                #     self.output_fd.write(bytes('%s\n' % ';'.join(result)))
 
     @classmethod
     def field_map(cls, field, table):
@@ -238,7 +245,10 @@ class Query(object):
             return None
 
         if len(arg_list) == 3:
-            arg_list[2] = int(arg_list[2])
+            try:
+                arg_list[2] = int(arg_list[2])
+            except ValueError:
+                pass
             return arg_list
         else:
             raise Exception(
@@ -258,6 +268,28 @@ class Query(object):
                 return None
             expr_list = res
         return [operator, expr_list]
+
+    @classmethod
+    def parse_command(cls, command):
+        args = command.split(';')
+        cargs = args[0].split('_')
+
+        # Command parse
+        if cargs[0] == 'ACKNOWLEDGE':
+            command = 'ack'
+        elif cargs[2] == 'DOWNTIME':
+            command = 'downtime'
+
+        # Table parse
+        host = args[1]
+        if cargs[1] == 'HOST':
+            table = 'host'
+            u_id = args[1]
+        elif cargs[1] == 'SVC':
+            table = 'service'
+            u_id = '%s-%s' % (args[1], args[2])
+
+        return cls(None, command, table, columns=[u_id, host])
 
     @classmethod
     def parse(cls, fd, string):
@@ -315,6 +347,8 @@ class Query(object):
                 elif members[0] == 'GET':
                     method = 'GET'
                     table = members[1]
+                elif members[0] == 'COMMAND':
+                    return cls.parse_command(members[2])
                 # Optional lines
                 elif members[0] == 'Columns:':
                     options['columns'] = members[1:]
