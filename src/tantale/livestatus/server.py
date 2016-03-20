@@ -94,12 +94,14 @@ class LivestatusServer(object):
                                         pass
                                     break
                                 elif data.strip() == '':
-                                    # Empty line - query END - process
-                                    keep = self.handle_query(request)
-                                    if not keep:
-                                        break
-                                    else:
-                                        request = ""
+                                    # Empty line - process query
+                                    if request != "":
+                                        keep = self.handle_query(request)
+                                        if not keep:
+                                            break
+                                        else:
+                                            request = ""
+                                    break
                                 else:
                                     # Append to query
                                     request += str(data)

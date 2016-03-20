@@ -7,6 +7,7 @@ import test
 import time
 import sys
 import json
+import random
 from six import b as bytes
 
 import test
@@ -121,11 +122,12 @@ class BenchElasticsearchTestCase(DaemonTestCase, ElasticsearchBaseTestCase):
         for a in range(how_many):
             timestamp = int(time.time())
             checks = [
-                "%s local%d Host 0 test funkychars ><&(){}[],;:!\n",
-                "%s local%d Service 0 test funkychars ><&(){}[],;:!\n",
+                "%s local%d Host %d test funkychars ><&(){}[],;:!\n",
+                "%s local%d Service %d test funkychars ><&(){}[],;:!\n",
             ]
             for check in checks:
-                sock.send(bytes(check % (timestamp, a)))
+                state = random.randrange(0, 3)
+                sock.send(bytes(check % (timestamp, a, state)))
         sock.close()
         self.flush()
 

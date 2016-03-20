@@ -13,6 +13,7 @@ You may look setup in tantale.input.backends.elasticsearch.
 from __future__ import print_function
 
 import json
+import copy
 from six import string_types
 from datetime import datetime
 
@@ -116,13 +117,21 @@ class ElasticsearchBackend(Backend):
     def convert_expr(self, field, operator, value=None):
         # Bool
         if value is None:
-            if field in ('and', 'or', 'not'):
+            if field in ('and', 'or'):
                 l = []
                 for expr in operator:
                     l.append(self.convert_expr(*expr))
                 return {field: l}
+            if field in ('not',):
+                return {field: self.convert_expr(*operator[0])}
             else:
                 raise Exception('Unknown boolean operator %s' % field)
+
+        # Special case - parent field
+        related = False
+        if field.startswith('host.'):
+            related = 'host'
+            field = field[5:]
 
         # Special cases - null values - not posted in input
         filt = {}
@@ -131,30 +140,23 @@ class ElasticsearchBackend(Backend):
                 {'not': {'exists': {'field': field}}},
                 {'term': {field: value}}
             ]}
-            return filt
-
-        # Special case - parent field
-        related = False
-        if field.startswith('host.'):
-            related = 'host'
-            field = field[5:]
-
-        # Compare
-        filt = {}
-        if operator == "=":
-            filt['term'] = {field: value}
-        elif operator == "!=":
-            filt['not'] = {'term': {field: value}}
-        elif operator == ">":
-            filt['range'] = {field: {"gt": value}}
-        elif operator == ">=":
-            filt['range'] = {field: {"gte": value}}
-        elif operator == "<":
-            filt['range'] = {field: {"gt": value}}
-        elif operator == "<=":
-            filt['range'] = {field: {"gte": value}}
         else:
-            raise Exception("Unknown operator %s" % operator)
+            # Compare
+            filt = {}
+            if operator == "=":
+                filt['term'] = {field: value}
+            elif operator == "!=":
+                filt['not'] = {'term': {field: value}}
+            elif operator == ">":
+                filt['range'] = {field: {"gt": value}}
+            elif operator == ">=":
+                filt['range'] = {field: {"gte": value}}
+            elif operator == "<":
+                filt['range'] = {field: {"gt": value}}
+            elif operator == "<=":
+                filt['range'] = {field: {"gte": value}}
+            else:
+                raise Exception("Unknown operator %s" % operator)
 
         # Map back into parent filter
         if related:
@@ -181,8 +183,8 @@ class ElasticsearchBackend(Backend):
             raise NotImplementedError
 
     def query_status(self, query, qtype):
-        es_meta = {"index": self.status_index}
-        es_query = {'filter': {'and': [{'type': {'value': qtype}}]}}
+        es_meta = {"index": self.status_index, 'type': qtype}
+        es_query = {'filter': {'and': []}}
 
         if query.filters:
             for filt in query.filters:
@@ -193,30 +195,32 @@ class ElasticsearchBackend(Backend):
             body = ""
             for stat in query.stats:
                 body += json.dumps(es_meta) + "\n"
-                stat_query = es_query.copy()
-                es_query['filter']['and'].append(self.convert_expr(*stat))
+                stat_query = copy.deepcopy(es_query)
+                stat_query['filter']['and'].append(self.convert_expr(*stat))
                 body += json.dumps(stat_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
 
             result = []
             for response in self.elasticclient.msearch(body)['responses']:
-                self.log.debug('Elasticsearch response :\n%s' % response)
+                # self.log.debug('Elasticsearch response :\n%s' % response)
                 result.append(response['hits']['total'])
             count = 1
             query.append(result)
         else:
-            es_query['size'] = query.limit
+            if query.limit:
+                es_query['size'] = query.limit
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
 
             response = self.elasticclient.msearch(body)['responses'][0]
-            self.log.debug('Elasticsearch response :\n%s' % response)
+            # self.log.debug('Elasticsearch response :\n%s' % response)
             if 'error' in response:
+                # Handle empty result
                 return 0
             count = response['hits']['total']
             for hit in response['hits']['hits']:
-                query.append(response)
+                query.append(hit['_source'])
 
         return count
 
@@ -240,8 +244,8 @@ class ElasticsearchBackend(Backend):
         """
         # Catch
 
-        es_meta = {"index": "%s-*" % self.log_index}
-        es_query = {'filter': {'and': [{'type': {'value': 'event'}}]}}
+        es_meta = {"index": "%s-*" % self.log_index, '_type': 'event'}
+        es_query = {'filter': {'and': []}}
 
         if query.filters:
             for filt in query.filters:
@@ -259,22 +263,25 @@ class ElasticsearchBackend(Backend):
 
             result = []
             for response in self.elasticclient.msearch(body)['responses']:
-                self.log.debug('Elasticsearch response :\n%s' % response)
+                # self.log.debug('Elasticsearch response :\n%s' % response)
                 result.append(response['hits']['total'])
             count = 1
             query.append(result)
         else:
+            if query.limit:
+                es_query['size'] = query.limit
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
 
             response = self.elasticclient.msearch(body)['responses'][0]
-            self.log.debug('Elasticsearch response :\n%s' % response)
+            # self.log.debug('Elasticsearch response :\n%s' % response)
             if 'error' in response:
+                # Handle empty result
                 return 0
             count = response['hits']['total']
             for hit in response['hits']['hits']:
-                query.append(response)
+                query.append(hit['_source'])
 
         return count
 

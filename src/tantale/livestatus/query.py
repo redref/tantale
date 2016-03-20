@@ -14,10 +14,12 @@ KNOWN_FIELDS = (
 FIELDS_MAPPING = {
     "state": "status",
     "name": "hostname",
+    "host_name": "hostname",
+    "service_description": "output",
     # No address here, only hostnames
     "address": "hostname",
     "last_state_change": "timestamp",
-    "plugin_output": "ouput",
+    "plugin_output": "output",
     "description": "check",
     "acknowledged": "ack",
     "scheduled_downtime_depth": "downtime",
@@ -47,7 +49,9 @@ FIELDS_DUMMY = {
     "latency": 0,
     "execution_time": 0,
     "custom_variables": {},
-    "class": 1
+    "class": 1,
+    "state_type": 1,
+    "type": '',
 }
 
 # Data in status_table / Livestatus visible configuration
@@ -140,9 +144,42 @@ class Query(object):
         # Mapping back to columns
         if self.columns:
             mapped_res = []
+            # print(self.columns)
+            # print(result)
             for field in self.columns:
-                mapped_res.append(result.get(field, None))
 
+                if field.startswith("host_"):
+                    field = field[5:]
+                if field.startswith("service_"):
+                    field = field[8:]
+                if field.startswith("log_"):
+                    field = field[4:]
+
+                # Map
+                map_name = False
+                if field in result:
+                    map_name = field
+                elif field in FIELDS_MAPPING:
+                    map_name = FIELDS_MAPPING[field]
+                elif field in FIELDS_DUMMY:
+                    map_name = FIELDS_DUMMY[field]
+
+                # Append
+                if map_name:
+                    res = result.get(map_name, None)
+                    if res is None:
+                        if map_name in ('downtime', 'ack'):
+                            res = 0
+                        else:
+                            res = ''
+                    else:
+                        if map_name in ('timestamp'):
+                            res = int(res / 1000)
+                    mapped_res.append(res)
+                else:
+                    mapped_res.append('')
+
+            # print(mapped_res)
             self.results.append(mapped_res)
         else:
             self.results.append(result)
@@ -288,6 +325,8 @@ class Query(object):
                         options['keepalive'] = True
                 elif members[0] == 'OutputFormat:':
                     options['oformat'] = members[1]
+                elif members[0] == 'Limit:':
+                    options['limit'] = int(members[1])
                 elif members[0] == 'Localtime:':
                     pass
                 else:

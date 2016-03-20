@@ -40,6 +40,12 @@ def main():
                           action="store_true",
                           help="log to stdout")
 
+        parser.add_option("-d", "--debug",
+                          dest="log_debug",
+                          default=False,
+                          action="store_true",
+                          help="with --log_stdout, logging level to DEBUG ")
+
         parser.add_option("-p", "--pidfile",
                           dest="pidfile",
                           default=None,
@@ -113,7 +119,10 @@ def main():
         log = logging.getLogger('tantale')
 
         if options.log_stdout:
-            log.setLevel(logging.DEBUG)
+            if options.log_debug:
+                log.setLevel(logging.DEBUG)
+            else:
+                log.setLevel(logging.INFO)
             streamHandler = logging.StreamHandler(sys.stdout)
             streamHandler.setFormatter(DebugFormatter())
             streamHandler.setLevel(logging.DEBUG)
