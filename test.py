@@ -74,7 +74,7 @@ def getTests(mod_name, src=None, class_prefix="", bench=False):
         # Recurse
         if os.path.isdir(pathname):
             for f in os.listdir(pathname):
-                if len(f) > 3 and f[-3:] == '.py':
+                if len(f) > 4 and f[:3] == 'tes' and f[-3:] == '.py':
                     tests.extend(getTests(
                         f[:-3], mod.__path__,
                         "%s_%s" % (class_prefix, mod_name), bench))
@@ -208,6 +208,12 @@ if __name__ == "__main__":
                       default=False,
                       action="store_true",
                       help="log daemon to stdout (messy with verbose)")
+    parser.add_option("-d",
+                      "--debug",
+                      dest="debug",
+                      default=False,
+                      action="store_true",
+                      help="set log level to DEBUG (instead INFO)")
     parser.add_option("-n",
                       "--no-mock",
                       dest="nomock",
@@ -223,7 +229,10 @@ if __name__ == "__main__":
     handler = logging.StreamHandler(sys.stderr)
     log.addHandler(handler)
     if options.log:
-        log.setLevel(logging.DEBUG)
+        if options.debug:
+            log.setLevel(logging.DEBUG)
+        else:
+            log.setLevel(logging.INFO)
         handler.setFormatter(DebugFormatter())
         handler.setLevel(logging.DEBUG)
     else:

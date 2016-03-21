@@ -78,3 +78,13 @@ def load_class(fqcn, module_prefix='internal_'):
         raise TypeError("%s is not a class" % fqcn)
     # Return class
     return cls
+
+
+def load_backend(caller, class_name):
+    if not class_name.endswith('Backend'):
+        raise Exception(
+            "%s is not a valid backend. "
+            "Class name don't finish by Backend." % class_name)
+    file = class_name[:-len('Backend')].lower()
+    fqcn = 'tantale.backends.%s.%s.%s' % (file, caller, class_name)
+    return load_class(fqcn)

@@ -1,0 +1,40 @@
+{
+  "template": "status_logs-*",
+  "mappings": {
+    "_default_": {
+      "properties": {
+        "timestamp": {
+          "format": "epoch_second||strict_date_optional_time||epoch_millis",
+          "type": "date"
+        },
+        "hostname": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "check": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "status": {
+          "type": "long"
+        },
+        "output": {
+          "index": "not_analyzed",
+          "type": "string"
+        },
+        "performance_data": {
+          "properties": {
+            "name": {
+                "index": "not_analyzed",
+                "type": "string"
+            }
+          },
+          "type": "nested"
+        },
+        "tags": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

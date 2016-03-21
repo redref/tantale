@@ -11,7 +11,7 @@ import socket
 import select
 from six import b as bytes
 
-from tantale.utils import load_class
+from tantale.utils import load_backend
 from tantale.input.check import Check
 
 try:
@@ -38,15 +38,6 @@ class InputServer(object):
 
         # Initialize Members
         self.config = config
-
-    def load_backend(caller, class_name):
-        if not class_name.endswith('Backend'):
-            raise Exception(
-                "%s is not a valid backend. "
-                "Class name don't finish by Backend." % class_name)
-        file = class_name[:-len('Backend')].lower()
-        fqcn = 'tantale.input.backends.%s.%s' % (file, class_name)
-        return load_class(fqcn)
 
     def input(self, check_queue):
         if setproctitle:
@@ -137,7 +128,7 @@ class InputServer(object):
         backends = []
         for backend in self.config['backends']:
             try:
-                cls = self.load_backend(backend)
+                cls = load_backend('input', backend)
                 backends.append(
                     cls(self.config['backends'].get(backend, None)))
             except:

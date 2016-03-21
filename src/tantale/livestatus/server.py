@@ -11,7 +11,7 @@ import select
 import socket
 import errno
 
-from tantale.utils import load_class
+from tantale.utils import load_backend
 from tantale.livestatus.query import Query
 
 try:
@@ -44,15 +44,6 @@ class LivestatusServer(object):
         # Initialize Members
         self.config = config
 
-    def load_backend(caller, class_name):
-        if not class_name.endswith('Backend'):
-            raise Exception(
-                "%s is not a valid backend. "
-                "Class name don't finish by Backend." % class_name)
-        file = class_name[:-len('Backend')].lower()
-        fqcn = 'tantale.livestatus.backends.%s.%s' % (file, class_name)
-        return load_class(fqcn)
-
     def livestatus(self):
         if setproctitle:
             setproctitle('%s - Livestatus' % getproctitle())
@@ -61,7 +52,7 @@ class LivestatusServer(object):
         backends = []
         for backend in self.config['backends']:
             try:
-                cls = self.load_backend(backend)
+                cls = load_backend('livestatus', backend)
                 backends.append(
                     cls(self.config['backends'].get(backend, None)))
             except:
@@ -70,8 +61,6 @@ class LivestatusServer(object):
         if len(backends) == 0:
             self.log.critical('No available backends')
             return
-
-        from tantale.livestatus.query import Query
 
         class RequestHandler(socketserver.StreamRequestHandler):
             def handle(self):
