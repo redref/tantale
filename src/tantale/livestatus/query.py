@@ -72,19 +72,19 @@ STATUS_TABLE = {
 
 class Query(object):
     __slots__ = [
-        'output_fd', 'method', 'table',
+        'output_sock', 'method', 'table',
         'columns', 'filters', 'stats', 'limit',
         'rheader', 'oformat', 'keepalive', 'headers',
         'separators', 'results',
     ]
 
     def __init__(
-        self, output_fd, method, table,
+        self, output_sock, method, table,
         columns=None, filters=None, stats=None, limit=None,
         rheader=None, oformat='csv', keepalive=None, headers=False,
         separators=['\n', ';', ',', '|']
     ):
-        self.output_fd = output_fd
+        self.output_sock = output_sock
         self.method = method
         self.table = table
         self.columns = columns
@@ -199,7 +199,7 @@ class Query(object):
     def _flush(self):
         if self.rheader == 'fixed16':
             string = str(self.results)
-            self.output_fd.write(
+            self.output_sock.send(
                 bytes('%3d %11d %s\n' % (200, len(string) + 1, string)))
         else:
             if len(self.results) > 0:
@@ -292,7 +292,7 @@ class Query(object):
         return cls(None, command, table, columns=[u_id, host])
 
     @classmethod
-    def parse(cls, fd, string):
+    def parse(cls, sock, string):
         """
         Parse a string and create a livestatus query
         """
@@ -367,7 +367,7 @@ class Query(object):
                     raise Exception('Unknown command %s' % members[0])
 
                 # print(options)
-            return cls(fd, method, table, **options)
+            return cls(sock, method, table, **options)
         except:
             raise Exception(
                 'Error %s\nparsing line "%s" on query "%s"'

@@ -9,20 +9,10 @@ import logging
 
 import select
 import socket
-import errno
+from threading import Thread, Event
 
 from tantale.utils import load_backend
 from tantale.livestatus.query import Query
-
-try:
-    import SocketServer as socketserver
-except:
-    import socketserver
-
-try:
-    ConnectionResetError
-except:
-    ConnectionResetError = None
 
 try:
     from setproctitle import setproctitle, getproctitle
@@ -39,99 +29,125 @@ class LivestatusServer(object):
         self.log = logging.getLogger('tantale')
 
         # Process signal
-        self.running = True
+        self.stop = Event()
 
         # Initialize Members
         self.config = config
+
+        # Load backends
+        self.backends = []
+        for backend in self.config['backends']:
+            try:
+                cls = load_backend('livestatus', backend)
+                self.backends.append(
+                    cls(self.config['backends'].get(backend, None)))
+            except:
+                self.log.error('Error loading backend %s' % backend)
+                self.log.debug(traceback.format_exc())
+        if len(self.backends) == 0:
+            self.log.critical('No available backends')
+            return
+
+    def handle_livestatus_query(self, sock, request):
+        queryobj = Query.parse(sock, request)
+        queryobj._query(self.backends)
+        queryobj._flush()
+        return queryobj.keepalive
+
+    def handle_client(self, socket):
+        run = True
+        request = ""
+        while not self.stop.is_set() and run:
+            try:
+                r = None
+                r, w, e = select.select([socket], [], [], 300)
+            except:
+                # Handle "Interrupted system call"
+                break
+
+            if r is not None:
+                sock = r[0]
+                f = sock.makefile()
+
+                while True:
+                    data = f.readline()
+                    if data is None or data == '':
+                        # Abnormal - closing thread
+                        run = False
+                        try:
+                            sock.shutdown(socket.SHUT_RDWR)
+                            sock.close()
+                        except:
+                            pass
+                        break
+                    elif data.strip() == '':
+                        # Empty line - process query
+                        if request != "":
+                            keep = self.handle_livestatus_query(sock, request)
+                            if not keep:
+                                break
+                            else:
+                                request = ""
+                        break
+                    else:
+                        # Append to query
+                        request += str(data)
+            else:
+                # Timeout waiting
+                run = False
+                break
 
     def livestatus(self):
         if setproctitle:
             setproctitle('%s - Livestatus' % getproctitle())
 
-        # Load backends
-        backends = []
-        for backend in self.config['backends']:
-            try:
-                cls = load_backend('livestatus', backend)
-                backends.append(
-                    cls(self.config['backends'].get(backend, None)))
-            except:
-                self.log.error('Error loading backend %s' % backend)
-                self.log.debug(traceback.format_exc())
-        if len(backends) == 0:
-            self.log.critical('No available backends')
+        # Open listener
+        connections = []
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            port = int(self.config['modules']['Livestatus']['port'])
+            s.bind(('', port))
+        except socket.error as msg:
+            self.log.critical('Socket bind failed.')
+            self.log.debug(traceback.format_exc())
             return
 
-        class RequestHandler(socketserver.StreamRequestHandler):
-            def handle(self):
-                run = True
-                while run:
-                    try:
-                        r, w, e = select.select([self.connection], [], [], 300)
-                        if r is not None:
-                            request = ""
-                            while True:
-                                data = self.rfile.readline().decode("utf-8")
-                                if data is None or data == '':
-                                    # Abnormal - closing thread
-                                    run = False
-                                    try:
-                                        self.connection.shutdown(
-                                            socket.SHUT_RDWR)
-                                        self.connection.close()
-                                    except:
-                                        pass
-                                    break
-                                elif data.strip() == '':
-                                    # Empty line - process query
-                                    if request != "":
-                                        keep = self.handle_query(request)
-                                        if not keep:
-                                            break
-                                        else:
-                                            request = ""
-                                    break
-                                else:
-                                    # Append to query
-                                    request += str(data)
-                        else:
-                            # Timeout waiting query
-                            break
+        s.listen(1024)
+        self.log.info("Listening on %s" % port)
+        connections.append(s)
 
-                    except ConnectionResetError:
-                        break
-                    except socket.error as e:
-                        if e.errno != errno.ECONNRESET:
-                            log = logging.getLogger('tantale')
-                            log.debug(
-                                "Client got : %s" % traceback.format_exc())
-                        break
+        # Signals
+        pipe = os.pipe()
+        connections.append(pipe[0])
 
-            def handle_query(self, request):
-                queryobj = Query.parse(self.wfile, request)
-                queryobj._query(backends)
-                queryobj._flush()
-                self.wfile.flush()
-                return queryobj.keepalive
+        def sig_handler(signum, frame):
+            self.log.debug("%s received" % signum)
+            self.stop.set()
+            os.write(pipe[1], bytes('END'))
+        signal.signal(signal.SIGINT, sig_handler)
+        signal.signal(signal.SIGTERM, sig_handler)
 
-            def finish(self, *args, **kwargs):
-                try:
-                    super(RequestHandler, self).finish(*args, **kwargs)
-                except:
-                    pass
+        # Logic
+        queue_state = True
+        while not self.stop.is_set():
+            try:
+                r = None
+                r, w, e = select.select(connections, [], [])
+            except:
+                # Handle "Interrupted system call"
+                break
 
-        class MyThreadingTCPServer(socketserver.ThreadingTCPServer):
-            allow_reuse_address = True
-            timeout = 10
-            request_queue_size = 10000
+            for sock in r:
+                if sock == s:
+                    # New clients
+                    sockfd, addr = s.accept()
+                    t = Thread(target=self.handle_client, args=(sockfd,))
+                    t.daemon = True
+                    t.start()
+                else:
+                    # Pipe receive something - exit
+                    break
 
-        port = int(self.config['modules']['Livestatus']['port'])
-        server = MyThreadingTCPServer(('', port), RequestHandler)
-
-        self.log.info('Listening on %s' % port)
-        try:
-            server.serve_forever()
-        except:
-            self.log.error('Error trying to listen')
-
+        s.close()
         self.log.info("Exit")
