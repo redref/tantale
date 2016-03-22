@@ -29,15 +29,21 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             related = 'host'
             field = field[5:]
 
-        # Special cases - null values - not posted in input
+        # Special cases - null values
         filt = {}
-        if field in ('downtime', 'ack') and value == 0 and operator == '=':
-            filt = {'or': [
-                {'not': {'exists': {'field': field}}},
-                {'term': {field: value}}
-            ]}
+        if field in ('downtime', 'ack'):
+            if value == 0 and operator in ('=', '>'):
+                filt = {'or': [
+                    {'not': {'exists': {'field': field}}},
+                    {'term': {field: value}}
+                ]}
+            elif value == 0 and operator == '!=':
+                filt = {'term': {field: 1}}
+            else:
+                raise NotImplementedError
+
         else:
-            # Compare
+            # Operators
             filt = {}
             if operator == "=":
                 filt['term'] = {field: value}
@@ -51,10 +57,13 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 filt['range'] = {field: {"gt": value}}
             elif operator == "<=":
                 filt['range'] = {field: {"gte": value}}
+            elif operator == "~~":
+                # Not case insensitive
+                filt['regexp'] = {field: value + ".*"}
             else:
                 raise Exception("Unknown operator %s" % operator)
 
-        # Map back into parent filter
+        # Map back parent fields filter into parent
         if related:
             filt = {
                 "has_parent": {
@@ -80,30 +89,33 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         if query.method in ('ack', 'downtime'):
             self.update_query(query)
         elif query.table == 'services':
-            return self.query_status(query, 'service')
+            return self.status_query(query, 'service')
         elif query.table == 'hosts':
-            return self.query_status(query, 'host')
+            return self.status_query(query, 'host')
         elif query.table == 'log':
-            return self.query_logs(query)
+            return self.logs_query(query)
         else:
             raise NotImplementedError
 
-    def query_status(self, query, qtype):
+    def status_query(self, query, qtype):
         es_meta = {"index": self.status_index, 'type': qtype}
         return self.search_query(query, es_meta)
 
-    def query_logs(self, query):
+    def logs_query(self, query):
         es_meta = {"index": "%s-*" % self.log_index, '_type': 'event'}
         return self.search_query(query, es_meta)
 
     def search_query(self, query, es_meta):
-        es_query = {'filter': {'and': []}}
+        es_query = {}
 
         if query.filters:
+            es_query = {'filter': {'and': []}}
             for filt in query.filters:
                 es_query['filter']['and'].append(self.convert_expr(*filt))
 
         if query.stats:
+            if 'filter' not in es_query:
+                es_query = {'filter': {'and': []}}
             es_meta['search_type'] = 'count'
             body = ""
             for stat in query.stats:

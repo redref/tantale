@@ -131,6 +131,18 @@ class Query(object):
         if self.table == "status":
             self.append(STATUS_TABLE)
             return
+        elif self.table == "commands":
+            self.append({'name': 'tantale'})
+            return
+        elif self.table == "hostgroups":
+            self.append({'name': 'tantale', 'alias': 'tantale'})
+            return
+        elif self.table == "contactgroups":
+            self.append({'name': 'tantale', 'alias': 'tantale'})
+            return
+        elif self.table == "servicegroups":
+            self.append({'name': 'tantale', 'alias': 'tantale'})
+            return
 
         for backend in backends:
             length = backend._query(self)
@@ -352,6 +364,8 @@ class Query(object):
                 # Optional lines
                 elif members[0] == 'Columns:':
                     options['columns'] = members[1:]
+                elif members[0] == 'ColumnHeaders:':
+                    options['headers'] = members[1:]
                 elif members[0] == 'ResponseHeader:':
                     options['rheader'] = members[1]
                 elif members[0] == 'KeepAlive:':
