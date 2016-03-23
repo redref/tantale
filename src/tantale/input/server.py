@@ -39,7 +39,7 @@ class InputServer(object):
         # Initialize Members
         self.config = config
 
-    def input(self, check_queue):
+    def input(self, check_queue, init_done):
         if setproctitle:
             setproctitle('%s - Input' % getproctitle())
 
@@ -57,6 +57,7 @@ class InputServer(object):
 
         s.listen(1024)
         self.log.info("Listening on %s" % port)
+        init_done.set()
         connections.append(s)
 
         # Signals
@@ -67,7 +68,6 @@ class InputServer(object):
             self.log.debug("%s received" % signum)
             self.running = False
             os.write(pipe[1], bytes('END'))
-        signal.signal(signal.SIGINT, sig_handler)
         signal.signal(signal.SIGTERM, sig_handler)
 
         # Logic
@@ -122,7 +122,6 @@ class InputServer(object):
             setproctitle('%s - Input_Backend' % getproctitle())
 
         # Ignore signals
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
         # Load backends

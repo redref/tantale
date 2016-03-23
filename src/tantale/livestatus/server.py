@@ -54,13 +54,13 @@ class LivestatusServer(object):
         queryobj._flush()
         return queryobj.keepalive
 
-    def handle_client(self, socket):
+    def handle_client(self, client_socket):
         run = True
         request = ""
         while not self.stop.is_set() and run:
             try:
                 r = None
-                r, w, e = select.select([socket], [], [], 300)
+                r, w, e = select.select([client_socket], [], [], 300)
             except:
                 # Handle "Interrupted system call"
                 break
@@ -97,7 +97,7 @@ class LivestatusServer(object):
                 run = False
                 break
 
-    def livestatus(self):
+    def livestatus(self, init_done):
         if setproctitle:
             setproctitle('%s - Livestatus' % getproctitle())
 
@@ -115,6 +115,7 @@ class LivestatusServer(object):
 
         s.listen(1024)
         self.log.info("Listening on %s" % port)
+        init_done.set()
         connections.append(s)
 
         # Signals
@@ -125,7 +126,6 @@ class LivestatusServer(object):
             self.log.debug("%s received" % signum)
             self.stop.set()
             os.write(pipe[1], bytes('END'))
-        signal.signal(signal.SIGINT, sig_handler)
         signal.signal(signal.SIGTERM, sig_handler)
 
         # Logic
@@ -143,7 +143,7 @@ class LivestatusServer(object):
                     # New clients
                     sockfd, addr = s.accept()
                     t = Thread(target=self.handle_client, args=(sockfd,))
-                    t.daemon = True
+                    t.daemon = False
                     t.start()
                 else:
                     # Pipe receive something - exit

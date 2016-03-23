@@ -1,3 +1,0 @@
-{"index": "status", "type": "host"}
-{"size": 1001, "filter": {"regexp": {"hostname": ".*17.*"}}}
-

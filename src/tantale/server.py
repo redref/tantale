@@ -48,11 +48,11 @@ class Server(object):
         # Signals (get then ignore)
         l_SIGINT_default_handler = signal.getsignal(signal.SIGINT)
         l_SIGTERM_default_handler = signal.getsignal(signal.SIGTERM)
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
         # Start
-        process.daemon = True
+        process.daemon = False
         process.start()
 
         # Restore signals
@@ -72,6 +72,7 @@ class Server(object):
         self.config = self.load_config(self.configfile)
 
         processes = []
+        init_events = []
 
         # Set the signal handlers
         def sig_handler(signum, frame):
@@ -104,10 +105,11 @@ class Server(object):
                     self.spawn(processes[-1])
 
                     # Socket Listener
+                    init_events.append(l_manager.Event())
                     processes.append(Process(
                         name="Input",
                         target=inputserver.input,
-                        args=(check_queue,),
+                        args=(check_queue, init_events[-1],),
                     ))
                     self.spawn(processes[-1])
 
@@ -117,10 +119,11 @@ class Server(object):
                     livestatusserver = LivestatusServer(self.config)
 
                     # Livestatus
+                    init_events.append(l_manager.Event())
                     processes.append(Process(
                         name="Livestatus",
                         target=livestatusserver.livestatus,
-                        args=(),
+                        args=(init_events[-1],),
                     ))
                     self.spawn(processes[-1])
 
@@ -132,6 +135,8 @@ class Server(object):
             self.log.critical('No modules enabled. Quitting')
 
         # We are ready
+        for event in init_events:
+            event.wait()
         _onInitDone()
 
         # Wait

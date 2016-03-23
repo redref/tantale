@@ -156,8 +156,6 @@ class Query(object):
         # Mapping back to columns
         if self.columns:
             mapped_res = []
-            # print(self.columns)
-            # print(result)
             for field in self.columns:
 
                 if field.startswith("host_"):
