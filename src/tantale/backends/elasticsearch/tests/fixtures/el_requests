@@ -1,0 +1,23 @@
+{"index": "status", "type": "host", "search_type": "count"}
+{"filter": {"and": [{"range": {"status": {"gte": 0}}}]}}
+{"index": "status", "type": "host", "search_type": "count"}
+{"filter": {"and": [{"range": {"status": {"gte": 0}}}, {"and": [{"range": {"status": {"gt": 0}}}, {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}]}]}}
+{"index": "status", "type": "host", "search_type": "count"}
+{"filter": {"and": [{"range": {"status": {"gte": 0}}}, {"and": [{"range": {"status": {"gt": 0}}}, {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}]}, {"and": [{"range": {"status": {"gt": 0}}}, {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}, {"or": [{"not": {"exists": {"field": "ack"}}}, {"term": {"ack": 0}}]}]}]}}
+
+{"index": "status", "type": "host"}
+{"filter": {"and": [{"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}, {"or": [{"not": {"exists": {"field": "ack"}}}, {"term": {"ack": 0}}]}, {"not": {"term": {"status": 0}}}]}}
+
+{"index": "status", "type": "service", "search_type": "count"}
+{"filter": {"and": [{"range": {"status": {"gte": 0}}}]}}
+{"index": "status", "type": "service", "search_type": "count"}
+{"filter": {"and": [{"range": {"status": {"gte": 0}}}, {"and": [{"range": {"status": {"gt": 0}}}, {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}, {"has_parent": {"type": "host", "filter": {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}}}, {"has_parent": {"type": "host", "filter": {"term": {"status": 0}}}}]}]}}
+{"index": "status", "type": "service", "search_type": "count"}
+{"filter": {"and": [{"range": {"status": {"gte": 0}}}, {"and": [{"range": {"status": {"gt": 0}}}, {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}, {"has_parent": {"type": "host", "filter": {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}}}, {"has_parent": {"type": "host", "filter": {"term": {"status": 0}}}}]}, {"and": [{"range": {"status": {"gt": 0}}}, {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}, {"has_parent": {"type": "host", "filter": {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}}}, {"or": [{"not": {"exists": {"field": "ack"}}}, {"term": {"ack": 0}}]}, {"has_parent": {"type": "host", "filter": {"term": {"status": 0}}}}]}]}}
+
+{"index": "status", "type": "service"}
+{"filter": {"and": [{"not": {"term": {"status": 0}}}, {"or": [{"not": {"exists": {"field": "ack"}}}, {"term": {"ack": 0}}]}, {"and": [{"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}, {"has_parent": {"type": "host", "filter": {"or": [{"not": {"exists": {"field": "downtime"}}}, {"term": {"downtime": 0}}]}}}]}, {"not": {"has_parent": {"type": "host", "filter": {"term": {"status": 1}}}}}, {"not": {"has_parent": {"type": "host", "filter": {"term": {"status": 2}}}}}]}}
+
+{"index": "status_logs-*", "_type": "event"}
+{"filter": {"and": [{"range": {"timestamp": {"gte": 1458322984}}}]}}
+

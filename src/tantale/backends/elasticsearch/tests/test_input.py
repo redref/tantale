@@ -7,11 +7,12 @@ import json
 import random
 from six import b as bytes
 
-from tantale.backends.elasticsearch.tests.tools \
-    import ElasticsearchBaseTestCase, ElasticclientMock
+from test import DaemonTestCase
+from tantale.backends.elasticsearch.tests.test_basics \
+    import ElasticsearchBaseTestCase, ElasticsearchClientMock
 
 
-class ElasticsearchTestCase(ElasticsearchBaseTestCase):
+class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
     def setUp(self):
         # Daemon config
         self.config = {'backends': {
@@ -19,7 +20,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase):
         }}
         super(ElasticsearchTestCase, self).setUp()
 
-    def test_sendOne(self):
+    def test_One(self):
         sock = self.get_socket()
 
         timestamp = int(time.time())
@@ -33,7 +34,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase):
         sock.close()
         self.flush()
 
-        bulk_calls = ElasticclientMock.get_results()
+        bulk_calls = ElasticsearchClientMock.get_calls()
         wait = 4
         self.assertEqual(
             len(bulk_calls), wait,
@@ -44,7 +45,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase):
         # TOFIX further test on those results
 
 
-class BenchElasticsearchTestCase(ElasticsearchBaseTestCase):
+class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.batch_size = 200
@@ -59,7 +60,7 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase):
         }
         super(BenchElasticsearchTestCase, self).setUp()
 
-    def test_sendFromOne(self):
+    def test_Mono(self):
         expected_time = float(6)
         how_many = 20000
 
@@ -81,7 +82,7 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase):
         stop = time.time()
 
         # Check call_count
-        bulk_calls = ElasticclientMock.get_results()
+        bulk_calls = ElasticsearchClientMock.get_calls()
         # 4 times how_many - Host/Service + both events
         wait = int(how_many / self.batch_size * 4)
         self.assertEqual(

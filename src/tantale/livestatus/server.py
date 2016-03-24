@@ -6,6 +6,7 @@ import os
 import signal
 import traceback
 import logging
+from six import b as bytes
 
 import select
 import socket
@@ -57,6 +58,7 @@ class LivestatusServer(object):
     def handle_client(self, client_socket):
         run = True
         request = ""
+        stack = ""
         while not self.stop.is_set() and run:
             try:
                 r = None
@@ -67,35 +69,40 @@ class LivestatusServer(object):
 
             if r is not None:
                 sock = r[0]
-                f = sock.makefile()
+                data = sock.recv(4096)
+                if data == bytes(''):
+                    # Closing thread
+                    run = False
+                    try:
+                        sock.shutdown(socket.SHUT_RDWR)
+                        sock.close()
+                    except:
+                        pass
+                    break
 
-                while True:
-                    data = f.readline()
-                    if data is None or data == '':
-                        # Abnormal - closing thread
-                        run = False
-                        try:
-                            sock.shutdown(socket.SHUT_RDWR)
-                            sock.close()
-                        except:
-                            pass
-                        break
-                    elif data.strip() == '':
+                data = stack + data.decode('utf-8')
+
+                for line in data.split("\n"):
+                    if line == "":
                         # Empty line - process query
                         if request != "":
                             keep = self.handle_livestatus_query(sock, request)
                             if not keep:
+                                run = False
                                 break
                             else:
                                 request = ""
-                        break
                     else:
                         # Append to query
-                        request += str(data)
+                        if data.endswith("\n"):
+                            request += line + '\n'
+                        else:
+                            stack = line
             else:
                 # Timeout waiting
                 run = False
                 break
+        print('DROP')
 
     def livestatus(self, init_done):
         if setproctitle:

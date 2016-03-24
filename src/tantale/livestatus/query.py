@@ -299,7 +299,7 @@ class Query(object):
             table = 'service'
             u_id = '%s-%s' % (args[1], args[2])
 
-        return cls(None, command, table, columns=[u_id, host])
+        return cls(None, command, table, keepalive=True, columns=[u_id, host])
 
     @classmethod
     def parse(cls, sock, string):

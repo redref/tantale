@@ -1,0 +1,19 @@
+{"responses": [{"hits": {"hits": [], "total": 3, "max_score": 0.0}, "_shards": {"successful": 5, "failed": 0, "total": 5}, "took": 11, "timed_out": false}, {"hits": {"hits": [], "total": 2, "max_score": 0.0}, "_shards": {"successful": 5, "failed": 0, "total": 5}, "took": 9, "timed_out": false}, {"hits": {"hits": [], "total": 1, "max_score": 0.0}, "_shards": {"successful": 5, "failed": 0, "total": 5}, "took": 10, "timed_out": false}]}
+
+{"responses": [{"timed_out": false, "hits": {"total": 2, "max_score": 1.0, "hits": [{"_source": {"tags": {}, "hostname": "local1", "timestamp": 1458507032000, "performance_data": null, "status": 1, "last_check": 1458507032000, "output": "test funkychars ><&(){}[],;:!", "check": "Host"}, "_type": "host", "_index": "status", "_id": "local15", "_score": 1.0}, {"_source": {"tags": {}, "hostname": "local2", "timestamp": 1458507032000, "performance_data": null, "status": 2, "last_check": 1458507032000, "output": "test funkychars ><&(){}[],;:!", "check": "Host"}, "_type": "host", "_index": "status", "_id": "local8", "_score": 1.0}]}, "_shards": {"total": 5, "successful": 5, "failed": 0}, "took": 4}]}
+
+{"responses": [{"timed_out": false, "hits": {"total": 3, "max_score": 0.0, "hits": []}, "_shards": {"total": 5, "successful": 5, "failed": 0}, "took": 1}, {"timed_out": false, "hits": {"total": 2, "max_score": 0.0, "hits": []}, "_shards": {"total": 5, "successful": 5, "failed": 0}, "took": 8}, {"timed_out": false, "hits": {"total": 1, "max_score": 0.0, "hits": []}, "_shards": {"total": 5, "successful": 5, "failed": 0}, "took": 10}]}
+
+{"responses": [{"timed_out": false, "hits": {"total": 5, "max_score": 1.0, "hits": [{"_source": {"tags": {}, "hostname": "local1", "timestamp": 1458507032000, "performance_data": null, "status": 1, "last_check": 1458507032000, "output": "test funkychars ><&(){}[],;:!", "check": "Service"}, "_score": 1.0, "_index": "status", "_id": "local1-Service", "_parent": "local1", "_type": "service", "_routing": "local1"}, {"_source": {"tags": {}, "hostname": "local2", "timestamp": 1458507032000, "performance_data": null, "status": 1, "last_check": 1458507032000, "output": "test funkychars ><&(){}[],;:!", "check": "Service"}, "_score": 1.0, "_index": "status", "_id": "local13-Service", "_parent": "local13", "_type": "service", "_routing": "local13"}]}, "_shards": {"total": 5, "successful": 5, "failed": 0}, "took": 19}]}
+
+{"responses": [{"timed_out": false, "hits": {"total": 21, "max_score": 1.0, "hits": [{"_source": {"tags": {}, "hostname": "local1", "timestamp": 1458507032000, "performance_data": null, "status": 2, "output": "test funkychars ><&(){}[],;:!", "check": "Host"}, "_type": "event", "_index": "status_logs-2016.03.20", "_id": "local1", "_score": 1.0}, {"_source": {"tags": {}, "hostname": "local2", "timestamp": 1458507032000, "performance_data": null, "status": 2, "output": "test funkychars ><&(){}[],;:!", "check": "Host"}, "_type": "event", "_index": "status_logs-2016.03.20", "_id": "local2", "_score": 1.0}]}, "_shards": {"total": 15, "successful": 15, "failed": 0}, "took": 8}]}
+
+{"_shards": {"total": 2, "successful": 1, "failed": 0}, "_type": "host", "_index": "status", "_id": "local1", "_version": 3}
+
+{"_shards": {"total": 2, "successful": 1, "failed": 0}, "_type": "service", "_index": "status", "_id": "local2-Service", "_version": 3}
+
+{"_shards": {"total": 2, "successful": 1, "failed": 0}, "_type": "host", "_index": "status", "_id": "local1", "_version": 3}
+
+{"_shards": {"total": 2, "successful": 1, "failed": 0}, "_type": "service", "_index": "status", "_id": "local2-Service", "_version": 3}
+
+{"_shards": {"total": 2, "successful": 1, "failed": 0}, "_type": "service", "_index": "status", "_id": "local2-Service", "_version": 3}

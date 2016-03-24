@@ -165,4 +165,4 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         self.log.debug('Elasticsearch update request :\n%s' % str(kwargs))
         response = self.elasticclient.update(**kwargs)
-        self.log.debug('Elasticsearch response :\n%s' % response)
+        # self.log.debug('Elasticsearch response :\n%s' % response)

@@ -99,6 +99,7 @@ class SocketClient(object):
     def __init__(self, dst):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setblocking(True)
+        self.sock.settimeout(5)
         self.sock.connect(dst)
 
     def send(self, msg):

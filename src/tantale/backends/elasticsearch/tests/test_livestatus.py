@@ -5,11 +5,12 @@ from __future__ import print_function
 import time
 from six import b as bytes
 
-from tantale.backends.elasticsearch.tests.tools \
-    import ElasticsearchBaseTestCase, ElasticclientMock
+from test import DaemonTestCase
+from tantale.backends.elasticsearch.tests.test_basics \
+    import ElasticsearchBaseTestCase, ElasticsearchClientMock
 
 
-class ElasticsearchTestCase(ElasticsearchBaseTestCase):
+class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
     def setUp(self):
         # Daemon config
         self.config = {}
@@ -17,23 +18,45 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase):
 
     def test_Queries(self):
         sock = self.get_socket(6557)
+        self.maxDiff = None
 
-        res = ""
-        requests = self.getFixture('requests')
-        for line in requests.split('\n'):
-            if line == 'RECV':
-                res += sock.recv(4096).decode("utf-8")
+        responses = []
+        response = ""
+        # Gather up responses
+        for line in self.getFixture('responses').split('\n'):
+            if line == '':
+                responses.append(response)
+                response = ""
             else:
-                sock.send(bytes(line + '\n'))
+                response += line + '\n'
+        responses.reverse()
+
+        # Gather up requests (RECV mean response needed)
+        request = ""
+        sent = False
+        for line in self.getFixture('requests').split('\n'):
+            if sent and line != "RECV":
+                request = ""
+                sent = False
+
+            if line == '':
+                # Got request
+                sock.send(bytes(request + '\n'))
+                sent = True
+
+            elif line == '#RECV':
+                # Response parse
+                res = sock.recv(4096).decode("utf-8")
+                self.assertEqual(res, responses.pop())
+
+            elif line[0] != '#':
+                request += line + '\n'
 
         sock.close()
         self.flush()
 
-        self.maxDiff = None
-        self.assertEqual(res, self.getFixture('responses'))
 
-
-class BenchElasticsearchTestCase(ElasticsearchBaseTestCase):
+class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.config = {}
