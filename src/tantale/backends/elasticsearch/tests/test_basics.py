@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import time
+from six import b as bytes
 
 import test
 from test import DaemonTestCase
@@ -93,11 +94,13 @@ class ElasticsearchBaseTestCase(object):
 
 
 class ElasticsearchFailTestCase(DaemonTestCase):
+    """ Mainly test errors on catching """
     def mocking(self):
         # Mock elasticsearch client with sys.modules trick
         self.elastic_mod = sys.modules['elasticsearch.client']
 
         def none(*args, **kwargs):
+            raise Exception('Mock fail')
             return None
         test.Elasticsearch = none
         sys.modules['elasticsearch.client'] = test
@@ -106,4 +109,15 @@ class ElasticsearchFailTestCase(DaemonTestCase):
         sys.modules['elasticsearch.client'] = self.elastic_mod
 
     def test_FailedConnection(self):
-        pass
+        sock = self.get_socket()
+
+        timestamp = int(time.time())
+        checks = [
+            "%s localhost Host 0 test funkychars ><&(){}[],;:!\n",
+            "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
+        ]
+        for check in checks:
+            sock.send(bytes(check % timestamp))
+
+        sock.close()
+        self.flush()

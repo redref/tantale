@@ -4,6 +4,11 @@ import traceback
 import logging
 from six import b as bytes
 
+try:
+    unicode
+except:
+    unicode = None
+
 # Fields known by tantale
 KNOWN_FIELDS = (
     'type',
@@ -115,17 +120,6 @@ class Query(object):
         if len(self.stats) == 0:
             self.stats = None
 
-    def __getstate__(self):
-        return dict(
-            (slot, getattr(self, slot))
-            for slot in self.__slots__
-            if hasattr(self, slot)
-        )
-
-    def __setstate__(self, state):
-        for slot, value in state.items():
-            setattr(self, slot, value)
-
     def _query(self, backends):
         # Shortcut on status table
         if self.table == "status":
@@ -182,6 +176,11 @@ class Query(object):
                 # Append
                 if map_name:
                     res = result.get(map_name, None)
+
+                    # Python2 specific
+                    if unicode and isinstance(res, unicode):
+                        res = res.encode('ascii', 'ignore')
+
                     if res is None:
                         if map_name in ('downtime', 'ack'):
                             res = 0
@@ -209,6 +208,7 @@ class Query(object):
     def _flush(self):
         if self.rheader == 'fixed16':
             string = str(self.results)
+            print('%3d %11d %s\n' % (200, len(string) + 1, string))
             self.output_sock.send(
                 bytes('%3d %11d %s\n' % (200, len(string) + 1, string)))
         else:

@@ -43,3 +43,6 @@ coverage.xml
 # Editors temporary
 *.sublime-*
 .*.swp
+
+#
+.mock_calls

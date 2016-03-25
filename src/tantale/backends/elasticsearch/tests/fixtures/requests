@@ -115,11 +115,30 @@ COMMAND [1458501878] ACKNOWLEDGE_HOST_PROBLEM;local1;2;1;0;nagiosadmin;j;0
 COMMAND [1458497348] ACKNOWLEDGE_SVC_PROBLEM;local2;Service;2;1;0;nagiosadmin;ddd;0
 
 #COMMAND [1458682386] REMOVE_SVC_ACKNOWLEDGEMENT;local1;Service
-#
-# Put receive request at end to prevent daemon to stop early
-GET status
-Columns: livestatus_version program_version program_start num_hosts num_services
-Localtime: 1458332296
+GET commands
+Columns: name
+ColumnHeaders: off
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+#RECV
+GET hostgroups
+Columns: name alias
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+#RECV
+GET contactgroups
+Columns: name alias
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+#RECV
+GET servicegroups
+Columns: name alias
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
