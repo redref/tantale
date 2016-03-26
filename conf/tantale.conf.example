@@ -38,6 +38,9 @@ port = 2003
 [backends]
 
 [[ElasticsearchBackend]]
+# Livestatus specific option
+#  OUTDATED reported with state = 1
+freshness_timeout = 120
 
 # python-elasticsearch options
 hosts = http://127.0.0.1:9200

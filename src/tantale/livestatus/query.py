@@ -163,6 +163,7 @@ class Query(object):
 
     def append(self, result):
         # Mapping back to columns
+        # print(result)
         if self.columns:
             mapped_res = []
             for field in self.columns:
@@ -229,7 +230,7 @@ class Query(object):
     def _flush(self):
         if self.rheader == 'fixed16':
             string = str(self.results)
-            print('%3d %11d %s\n' % (200, len(string) + 1, string))
+            # print('%3d %11d %s\n' % (200, len(string) + 1, string))
             self.output_sock.send(
                 bytes('%3d %11d %s\n' % (200, len(string) + 1, string)))
         else:

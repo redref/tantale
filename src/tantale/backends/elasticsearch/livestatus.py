@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import json
 import copy
+import time
 
 from tantale.backends.elasticsearch.base import ElasticsearchBaseBackend
 from tantale.livestatus.backend import Backend
@@ -19,7 +20,22 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     l.append(self.convert_expr(*expr))
                 return {field: l}
             if field in ('not',):
-                return {field: self.convert_expr(*operator[0])}
+                # Elasticsearch does not support NAND / NOR
+                # Convert it to OR (NOT) and AND (NOT)
+                expr = self.convert_expr(*operator[0])
+                if 'and' in expr or 'or' in expr:
+                    if 'and' in expr:
+                        old = 'and'
+                        new = 'or'
+                    else:
+                        old = 'or'
+                        new = 'and'
+                    filt = {new: []}
+                    for nest_filt in expr[old]:
+                        filt[new].append({"not": nest_filt})
+                    return filt
+                else:
+                    return {field: self.convert_expr(*operator[0])}
             else:
                 raise Exception('Unknown boolean operator %s' % field)
 
@@ -29,7 +45,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             related = 'host'
             field = field[5:]
 
-        # Special cases - handle null values
+        # Special case - handle null values
         filt = {}
         if field in ('downtime', 'ack'):
             if value == 0 and operator in ('=', '>'):
@@ -62,6 +78,36 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 filt['regexp'] = {field: value + ".*"}
             else:
                 raise Exception("Unknown operator %s" % operator)
+
+        # Special case - handle freshness with last_check
+        if field == 'status':
+            fresh = (int(time.time()) - self.freshness_timeout) * 1000
+            if value == 0:
+                if operator == '=':
+                    filt = {'and': [
+                        filt,
+                        {'range': {'last_check': {'gte': fresh}}}
+                    ]}
+                elif operator == '>=':
+                    # Means everything
+                    pass
+                else:
+                    filt = {'or': [
+                        filt,
+                        {'range': {'last_check': {'lt': fresh}}}
+                    ]}
+            elif value == 1:
+                # Handle freshness as warning (value 1)
+                if operator == '=':
+                    filt = {'or': [
+                        {'term': {field: value}},
+                        {'range': {'last_check': {'lt': fresh}}}
+                    ]}
+                else:
+                    filt = {'and': [
+                        {'term': {field: value}},
+                        {'range': {'last_check': {'gte': fresh}}}
+                    ]}
 
         # Map back parent fields filter into parent
         if related:
@@ -125,8 +171,8 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             body = ""
             for stat in query.stats:
                 body += json.dumps(es_meta) + "\n"
-                stat_query = es_query.copy()
-                es_query['filter']['and'].append(self.convert_expr(*stat))
+                stat_query = copy.deepcopy(es_query)
+                stat_query['filter']['and'].append(self.convert_expr(*stat))
                 body += json.dumps(stat_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
 
@@ -153,7 +199,20 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 return 0
             count = response['hits']['total']
             for hit in response['hits']['hits']:
-                query.append(hit['_source'])
+                line = hit['_source']
+
+                # Special case - freshness status
+                if 'last_check' in line:
+                    fresh = (int(time.time()) - self.freshness_timeout) * 1000
+                    if line['last_check'] < fresh:
+                        line['status'] = 1
+                        line['output'] = "OUTDATED: %s" % line['output']
+
+                # Fix newly created checks - no last_check specified (upsert)
+                elif es_meta['index'] == self.status_index:
+                    line['last_check'] = line['timestamp']
+
+                query.append(line)
 
         return count
 

@@ -30,6 +30,8 @@ class BaseBackend(object):
             self.config['server_error_interval'])
         self._errors = {}
 
+        self.freshness_timeout = int(self.config['freshness_timeout'])
+
         # Initialize Lock
         self.lock = threading.Lock()
 
@@ -41,6 +43,7 @@ class BaseBackend(object):
             'get_default_config_help': 'get_default_config_help',
             'server_error_interval': ('How frequently to send repeated server '
                                       'errors'),
+            'freshness_timeout': 'Time to consider status invalid',
         }
 
     def get_default_config(self):
@@ -50,6 +53,7 @@ class BaseBackend(object):
         return {
             'get_default_config': 'get_default_config',
             'server_error_interval': 120,
+            'freshness_timeout': 300,
         }
 
     def _throttle_error(self, msg, *args, **kwargs):
