@@ -114,7 +114,19 @@ COMMAND [1458501878] ACKNOWLEDGE_HOST_PROBLEM;local1;2;1;0;nagiosadmin;j;0
 #
 COMMAND [1458497348] ACKNOWLEDGE_SVC_PROBLEM;local2;Service;2;1;0;nagiosadmin;ddd;0
 
-#COMMAND [1458682386] REMOVE_SVC_ACKNOWLEDGEMENT;local1;Service
+#
+COMMAND [1458682386] REMOVE_HOST_ACKNOWLEDGEMENT;local1;Service
+
+#
+COMMAND [1458682386] REMOVE_SVC_ACKNOWLEDGEMENT;local1;Service
+
+#
+COMMAND [1458999214] DEL_HOST_DOWNTIME;1
+
+#
+COMMAND [1458999214] DEL_SVC_DOWNTIME;2
+
+#
 GET commands
 Columns: name
 ColumnHeaders: off
@@ -142,5 +154,14 @@ Columns: name alias
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
+
+#RECV
+GET downtimes
+Columns: downtime_id downtime_author downtime_start_time downtime_end_time downtime_entry_time downtime_fixed downtime_duration downtime_is_service downtime_comment service_description host_name service_has_been_checked service_state host_has_been_checked host_state
+Localtime: 1458985774
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+Limit: 1001
 
 #RECV

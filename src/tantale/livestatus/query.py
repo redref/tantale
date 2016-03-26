@@ -57,6 +57,10 @@ FIELDS_DUMMY = {
     "class": 1,
     "state_type": 1,
     "type": '',
+    "downtime_start_time": 0,
+    "downtime_end_time": 0,
+    "downtime_entry_time": 0,
+    "downtime_duration": 0,
 }
 
 # Data in status_table / Livestatus visible configuration
@@ -77,6 +81,7 @@ STATUS_TABLE = {
 
 class Query(object):
     __slots__ = [
+        'log',
         'output_sock', 'method', 'table',
         'columns', 'filters', 'stats', 'limit',
         'rheader', 'oformat', 'keepalive', 'headers',
@@ -89,6 +94,8 @@ class Query(object):
         rheader=None, oformat='csv', keepalive=None, headers=False,
         separators=['\n', ';', ',', '|']
     ):
+        self.log = logging.getLogger('tantale')
+
         self.output_sock = output_sock
         self.method = method
         self.table = table
@@ -121,7 +128,7 @@ class Query(object):
             self.stats = None
 
     def _query(self, backends):
-        # Shortcut on status table
+        # Shortcut on DUMMY Tables
         if self.table == "status":
             self.append(STATUS_TABLE)
             return
@@ -138,6 +145,14 @@ class Query(object):
             self.append({'name': 'tantale', 'alias': 'tantale'})
             return
 
+        # Tables convert to filters
+        elif self.table == 'downtimes':
+            self.table = 'services_and_hosts'
+            if self.filters:
+                self.filters.append(['downtime', '!=', 0])
+            else:
+                self.filters = [['downtime', '!=', 0]]
+
         for backend in backends:
             length = backend._query(self)
 
@@ -151,7 +166,6 @@ class Query(object):
         if self.columns:
             mapped_res = []
             for field in self.columns:
-
                 if field.startswith("host_"):
                     field = field[5:]
                 if field.startswith("service_"):
@@ -169,9 +183,13 @@ class Query(object):
                     mapped_res.append(FIELDS_DUMMY[field])
                     continue
 
-                # DEBUG : usefull lines
-                # if len(self.results) == 0:
-                #     print(field + " => " + str(map_name))
+                # Special logics
+                elif field == 'downtime_is_service':
+                    if result.get('check') == 'Host':
+                        mapped_res.append(0)
+                    else:
+                        mapped_res.append(1)
+                    continue
 
                 # Append
                 if map_name:
@@ -194,10 +212,13 @@ class Query(object):
                 else:
                     mapped_res.append('')
 
-            # print(mapped_res)
             self.results.append(mapped_res)
         else:
             self.results.append(result)
+
+        if len(self.results) == 1:
+            self.log.debug(
+                'Tantale result (first line):\n%s', str(self.results))
 
         if self.oformat == 'csv' and not self.rheader:
             self._output_line()
@@ -283,23 +304,34 @@ class Query(object):
     def parse_command(cls, command):
         args = command.split(';')
         cargs = args[0].split('_')
+        query_args = []
 
         # Command parse
-        if cargs[0] == 'ACKNOWLEDGE':
+        if cargs[0] in ('REMOVE', 'DEL'):
+            query_args.append(False)
+        else:
+            query_args.append(True)
+
+        if cargs[2] == 'ACKNOWLEDGEMENT' or cargs[0] == 'ACKNOWLEDGE':
             command = 'ack'
         elif cargs[2] == 'DOWNTIME':
             command = 'downtime'
+        else:
+            raise NotImplementedError
 
         # Table parse
-        host = args[1]
-        if cargs[1] == 'HOST':
+        query_args.append(args[1])
+        table = None
+        if not query_args[0] and command == 'downtime':
+            # Remove downtime done only by id
+            pass
+        elif cargs[1] == 'HOST':
             table = 'host'
-            u_id = args[1]
         elif cargs[1] == 'SVC':
             table = 'service'
-            u_id = '%s-%s' % (args[1], args[2])
+            query_args.append(args[2])
 
-        return cls(None, command, table, keepalive=True, columns=[u_id, host])
+        return cls(None, command, table, keepalive=True, columns=query_args)
 
     @classmethod
     def parse(cls, sock, string):

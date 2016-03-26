@@ -48,7 +48,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
 class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
-        self.batch_size = 200
+        self.batch_size = 4000
         self.config = {
             'backends': {
                 'ElasticsearchBackend': {
@@ -74,12 +74,23 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
                 "%s local%d Service %d test funkychars ><&(){}[],;:!\n",
             ]
             for check in checks:
-                state = random.randrange(0, 3)
+                # Push 10% some random to test send_logs
+                state = random.randrange(0, 29)
+                if state < 27:
+                    state = 0
+                elif state == 27:
+                    state = 1
+                elif state == 28:
+                    state = 2
+                elif state == 29:
+                    state = 3
                 sock.send(bytes(check % (timestamp, a, state)))
         sock.close()
         self.flush()
 
         stop = time.time()
+
+        print('Input bench time %f' % (stop - start))
 
         # Check call_count
         bulk_calls = ElasticsearchClientMock.get_calls()

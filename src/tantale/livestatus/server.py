@@ -102,7 +102,6 @@ class LivestatusServer(object):
                 # Timeout waiting
                 run = False
                 break
-        print('DROP')
 
     def livestatus(self, init_done):
         if setproctitle:

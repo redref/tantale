@@ -29,7 +29,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             related = 'host'
             field = field[5:]
 
-        # Special cases - null values
+        # Special cases - handle null values
         filt = {}
         if field in ('downtime', 'ack'):
             if value == 0 and operator in ('=', '>'):
@@ -88,6 +88,8 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         if query.method in ('ack', 'downtime'):
             self.update_query(query)
+        elif query.table == 'services_and_hosts':
+            return self.status_query(query, None)
         elif query.table == 'services':
             return self.status_query(query, 'service')
         elif query.table == 'hosts':
@@ -98,7 +100,10 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             raise NotImplementedError
 
     def status_query(self, query, qtype):
-        es_meta = {"index": self.status_index, 'type': qtype}
+        if qtype is not None:
+            es_meta = {"index": self.status_index, 'type': qtype}
+        else:
+            es_meta = {"index": self.status_index}
         return self.search_query(query, es_meta)
 
     def logs_query(self, query):
@@ -153,14 +158,62 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         return count
 
     def update_query(self, query):
-        command = {"doc": {query.method: 1}}
+        # Parse set/unset bool
+        value = int(query.columns[0])
+        if value == 0:
+            value = None
+        # Document id
+        did = "-".join(query.columns[1:])
+        # Type
+        el_type = query.table
+
+        # Update to do
+        command = {"doc": {query.method: value}}
+
+        # Downtime creation need an unique id
+        if query.method == "downtime":
+            if value == 1:
+                # Generate unique id
+                id_search = {
+                    "aggs": {"uid": {"max": {"field": "downtime_id"}}}}
+                kwargs = {
+                    'index': self.status_index,
+                    'size': 0,
+                    'body': json.dumps(id_search),
+                }
+                res = self.elasticclient.search(**kwargs)
+                # print(res)
+                uid = res['aggregations']['uid']['value']
+                if uid:
+                    uid = int(uid) + 1
+                else:
+                    uid = 1
+                command['doc']['downtime_id'] = uid
+            else:
+                # Get ID by downtime id
+                id_search = {'filter': {'term': {'downtime_id': did}}}
+                kwargs = {
+                    'index': self.status_index,
+                    'size': 1,
+                    'body': json.dumps(id_search),
+                }
+                res = self.elasticclient.search(**kwargs)
+                # print(res)
+                if len(res['hits']['hits']) > 0:
+                    did = res['hits']['hits'][0]['_id']
+                    el_type = res['hits']['hits'][0]['_type']
+                    command['doc']['downtime_id'] = None
+                else:
+                    return
+
+        # Update
         kwargs = {
             'index': self.status_index,
             'body': json.dumps(command),
-            'doc_type': query.table,
-            'id': query.columns[0],
+            'doc_type': el_type,
+            'id': did,
         }
-        if query.table == 'service':
+        if el_type == 'service':
             kwargs['parent'] = query.columns[1]
 
         self.log.debug('Elasticsearch update request :\n%s' % str(kwargs))

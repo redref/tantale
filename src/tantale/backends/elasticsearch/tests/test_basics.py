@@ -49,6 +49,10 @@ class ElasticsearchClientMock(object):
     def get_response(self):
         return json.loads(self.fixture.pop())
 
+    def search(self, **kwargs):
+        self.write_call('msearch', kwargs)
+        return self.get_response()
+
     def msearch(self, **kwargs):
         self.write_call('msearch', kwargs)
         return self.get_response()
@@ -80,7 +84,11 @@ class ElasticsearchBaseTestCase(object):
             os.unlink(ElasticsearchClientMock.result_file)
 
         # Gather elastic responses fixture
-        el_responses = self.getFixture('el_responses').split('\n\n')
+        responses = []
+        for line in self.getFixture('el_responses').split('\n'):
+            if not line.startswith('#') and line != '':
+                responses.append(line)
+        el_responses = responses
         el_responses.reverse()
 
         # Mock elasticsearch client with sys.modules trick

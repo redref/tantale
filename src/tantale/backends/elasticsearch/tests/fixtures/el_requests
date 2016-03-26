@@ -21,3 +21,4 @@
 {"index": "status_logs-*", "_type": "event"}
 {"filter": {"and": [{"range": {"timestamp": {"gte": 1458322984}}}]}}
 
+{'index': 'status', 'id': 'local1', 'doc_type': 'host', 'body': '{"doc": {"downtime": 1}}'}

@@ -24,6 +24,8 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         response = ""
         # Gather up responses
         for line in self.getFixture('responses').split('\n'):
+            if line.startswith('#'):
+                continue
             if line == '':
                 responses.append(response)
                 response = ""
