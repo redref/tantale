@@ -4,27 +4,35 @@
 
 Tantale intend to be a monitoring tool which interact with third party monitoring GUI's and tools.
 
-Assumptions:
-  * configuration already on configuration-management tools
-  * livestatus schema is quite complicated (and never used ?)
-  * mainly passive checks
-
 Tantale store all checks/statuses (hosts/services/...) into database backend (only elasticsearch for now) in order to by fully interoperable.
 
 Objective is to provide a Livestatus API keeping interoperability in mind.
 
+Assumptions:
+  * all configuration data is already present on hosts (with configuration management tools like puppet/chef/...)
+
+> Tantale does not carry any configuration regarding data (groups, contacts, ...). This part must be done directly by hosts.
+
+  * livestatus "classic" schema is quite complicated and/or redundant with backend/metrics analysis capacities.
+
+> Tantale intend to be compatible with Livestatus, but some functionnalities may have a different behavior.
+
+  * only passive checks
+
+> Tantale does not get any "poller" part
+
 Some cons:
-  * get monitoring events onto grafana/kibana
-  * no nagios/shinken daemon restart
-  * let backend handle replication and high availability
-  * configuration-less supervision
+  * monitoring results and events over time (with backend tools, NDLR grafana/kibana)
+  * no need for nagios/shinken daemon restart
+  * backend natively handle replication and high availability
+  * configuration-less
 
 My guidelines are:
   * keep every sub-processes autonomous (and simple)
 
 > Home-brewed tool for now.
 
-## Interfaces
+## Interfaces / Processes
 
 ### Livestatus
 
@@ -33,8 +41,14 @@ Livestatus sub-process listen to livestatus queries (port 6557 by default), then
 Database schema is quite simplified then livestatus API is quite truncated. 
 
 >Support:
->  * hosts/services/log tables
->  * acknowledge/downtime
+>  * hosts
+>  * services
+>  * log
+>  * acknowledge
+>  * downtime (bool flag instead of timed downtime)
+
+> Tested livestatus client (GUI's):
+>  * check-mk-multisite
 
 ### Input (Custom socket line protocol)
 
