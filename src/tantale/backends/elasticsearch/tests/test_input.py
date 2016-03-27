@@ -61,7 +61,7 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         super(BenchElasticsearchTestCase, self).setUp()
 
     def test_Mono(self):
-        expected_time = float(6)
+        expected_time = float(9)
         how_many = 20000
 
         start = time.time()
@@ -90,7 +90,7 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
 
         stop = time.time()
 
-        print('Input bench time %f' % (stop - start))
+        print("\nInput bench time %f" % (stop - start))
 
         # Check call_count
         bulk_calls = ElasticsearchClientMock.get_calls()

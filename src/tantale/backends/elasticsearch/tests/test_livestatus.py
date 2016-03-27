@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import time
+import threading
 from six import b as bytes
 
 from test import DaemonTestCase
@@ -16,7 +17,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         self.config = {}
         super(ElasticsearchTestCase, self).setUp()
 
-    def test_Queries(self):
+    def Queries(self, assertion=True):
         sock = self.get_socket(6557)
         self.maxDiff = None
 
@@ -49,29 +50,46 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
             elif line == '#RECV':
                 # Response parse
                 res = sock.recv(4096).decode("utf-8")
-                self.assertEqual(res, responses.pop())
+                if assertion:
+                    self.assertEqual(res, responses.pop())
 
             elif line[0] != '#':
                 request += line + '\n'
 
         sock.close()
+
+    def test_Queries(self):
+        self.Queries()
         self.flush()
 
 
-class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
+class BenchElasticsearchTestCase(ElasticsearchTestCase, DaemonTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.config = {}
         super(BenchElasticsearchTestCase, self).setUp()
 
-    def test_sendFromOne(self):
-        expected_time = float(6)
-        how_many = 20000
+    def test_simultaneousRequests(self):
+        expected_time = float(1)
+        how_many = 80
 
         start = time.time()
 
-        # TODO
-        # sock.close()
-        # self.flush()
+        threads = []
+        for i in range(how_many):
+            threads.append(threading.Thread(
+                target=self.Queries, args=(False,)))
+            threads[-1].start()
+
+        for t in threads:
+            t.join()
 
         stop = time.time()
+
+        print("\nLivestatus bench time %f" % (stop - start))
+
+        # Check time
+        self.assertTrue(
+            (stop - start) < expected_time,
+            "Runtime too long (more than %s) - %s secs" %
+            (expected_time, (stop - start)))
