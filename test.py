@@ -44,7 +44,7 @@ def getTests(mod_name, src=None, class_prefix="", bench=False):
 
     try:
         # Import the module
-        custom_name = '%s%s' % (class_prefix, mod_name)
+        custom_name = '%s_%s' % (class_prefix, mod_name)
         f, pathname, desc = imp.find_module(
             mod_name, src)
         mod = imp.load_module(
@@ -115,22 +115,19 @@ class SocketClient(object):
         return self.sock.recv(size)
 
     def close(self):
-        # TOFIX - closing too fast after send (test error)
+        # Wait mock to write data
         time.sleep(0.5)
+
         self.sock.shutdown(socket.SHUT_RDWR)
         self.sock.close()
 
 
 class DaemonTestCase(unittest.TestCase):
     mock = True
-
-    def assertEqual(self, *args, **kwargs):
-        if self.mock:
-            return super(DaemonTestCase, self).assertEqual(*args, **kwargs)
-        else:
-            return True
+    config_file = 'conf/tantale.conf.example'
 
     def setUp(self):
+        # Call mocking routine
         if self.mock and hasattr(self, 'mocking'):
             self.mocking()
 
@@ -138,17 +135,19 @@ class DaemonTestCase(unittest.TestCase):
         self.ready = Event()
         self.daemon_p = Process(target=self.launch)
         self.daemon_p.start()
+
+        # Wait daemon ready
         for i in range(100):
             if self.ready.is_set():
                 break
             time.sleep(0.1)
 
     def launch(self):
-        # Initialize Server
+        """ Launch tantale daemon to test it """
         server = Server(
             configfile=os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
-                'conf/tantale.conf.example'),
+                self.config_file),
             config_adds=getattr(self, 'config', None))
 
         # Run handle
@@ -158,12 +157,10 @@ class DaemonTestCase(unittest.TestCase):
         server.run(__onInitDone)
 
     def flush(self):
+        """ Terminate daemon """
         self.daemon_p.terminate()
         self.daemon_p.join()
         self.daemon_p = None
-
-    def get_socket(self, port=2003):
-        return SocketClient(('127.0.0.1', port))
 
     def getFixtureDirPath(self):
         path = os.path.join(
@@ -187,8 +184,31 @@ class DaemonTestCase(unittest.TestCase):
         if self.daemon_p:
             self.daemon_p.terminate()
             self.daemon_p.join()
+
         if self.mock and hasattr(self, 'unmocking'):
             self.unmocking()
+
+    def assertEqual(self, *args, **kwargs):
+        """ Override assert when mock is off """
+        if self.mock:
+            return super(DaemonTestCase, self).assertEqual(*args, **kwargs)
+        else:
+            return True
+
+
+class InputTestCase(DaemonTestCase):
+    def get_socket(self):
+        return SocketClient(('127.0.0.1', 2003))
+
+
+class LivestatusTestCase(DaemonTestCase):
+    def get_socket(self):
+        return SocketClient(('127.0.0.1', 6557))
+
+
+class ClientTestCase(DaemonTestCase):
+    config_file = 'conf/tantale.conf.example'
+
 
 ###############################################################################
 if __name__ == "__main__":

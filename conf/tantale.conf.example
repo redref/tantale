@@ -17,10 +17,6 @@ group =
 # Pid file
 pid_file = /var/run/tantale.pid
 
-# Maximum number of checks waiting to be processed.
-# When queue is full, new are dropped.
-queue_size = 16384
-
 ################################################################################
 ### Options for backends
 [modules]
@@ -32,6 +28,10 @@ port = 6557
 [[Input]]
 enabled = True
 port = 2003
+
+# Maximum number of checks waiting to be processed.
+# When queue is full, new are dropped.
+queue_size = 16384
 
 ################################################################################
 ### Options for backends

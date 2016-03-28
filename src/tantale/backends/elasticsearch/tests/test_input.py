@@ -7,12 +7,30 @@ import json
 import random
 from six import b as bytes
 
-from test import DaemonTestCase
-from tantale.backends.elasticsearch.tests.test_basics \
-    import ElasticsearchBaseTestCase, ElasticsearchClientMock
+from test import InputTestCase
+from tantale.backends.elasticsearch.tests.mixins \
+    import ElasticsearchOk, ElasticsearchConnectFail
 
 
-class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
+class ElasticsearchInputTestCase(ElasticsearchConnectFail, InputTestCase):
+    def test_FailedConnection(self):
+        sock = self.get_socket()
+
+        timestamp = int(time.time())
+        checks = [
+            "%s localhost Host 0 test funkychars ><&(){}[],;:!\n",
+            "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
+        ]
+        for check in checks:
+            sock.send(bytes(check % timestamp))
+
+        sock.close()
+        self.flush()
+
+        # TODO tests (logging, handle, ...)
+
+
+class ElasticsearchTestCase(ElasticsearchOk, InputTestCase):
     def setUp(self):
         # Daemon config
         self.config = {'backends': {
@@ -34,7 +52,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         sock.close()
         self.flush()
 
-        bulk_calls = ElasticsearchClientMock.get_calls()
+        bulk_calls = self.mock_class.get_calls()
         wait = 4
         self.assertEqual(
             len(bulk_calls), wait,
@@ -45,7 +63,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         # TOFIX further test on those results
 
 
-class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
+class BenchElasticsearchTestCase(ElasticsearchOk, InputTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.batch_size = 4000
@@ -56,7 +74,7 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
                     'backlog_size': self.batch_size * 10,
                 }
             },
-            'server': {'queue_size': 100000},
+            'modules': {'Input': {'queue_size': 100000}},
         }
         super(BenchElasticsearchTestCase, self).setUp()
 
@@ -93,7 +111,7 @@ class BenchElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         print("\nInput bench time %f" % (stop - start))
 
         # Check call_count
-        bulk_calls = ElasticsearchClientMock.get_calls()
+        bulk_calls = self.mock_class.get_calls()
         # 4 times how_many - Host/Service + both events
         wait = int(how_many / self.batch_size * 4)
         self.assertEqual(

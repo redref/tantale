@@ -6,19 +6,19 @@ import time
 import threading
 from six import b as bytes
 
-from test import DaemonTestCase
-from tantale.backends.elasticsearch.tests.test_basics \
-    import ElasticsearchBaseTestCase, ElasticsearchClientMock
+from test import LivestatusTestCase
+from tantale.backends.elasticsearch.tests.mixins \
+    import ElasticsearchOk, ElasticsearchConnectFail
 
 
-class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
+class ElasticsearchTestCase(ElasticsearchOk, LivestatusTestCase):
     def setUp(self):
         # Daemon config
         self.config = {}
         super(ElasticsearchTestCase, self).setUp()
 
     def Queries(self, assertion=True):
-        sock = self.get_socket(6557)
+        sock = self.get_socket()
         self.maxDiff = None
 
         responses = []
@@ -63,7 +63,7 @@ class ElasticsearchTestCase(ElasticsearchBaseTestCase, DaemonTestCase):
         self.flush()
 
 
-class BenchElasticsearchTestCase(ElasticsearchTestCase, DaemonTestCase):
+class BenchElasticsearchTestCase(ElasticsearchOk, LivestatusTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.config = {}
