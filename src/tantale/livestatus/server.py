@@ -103,7 +103,7 @@ class LivestatusServer(object):
                 run = False
                 break
 
-    def livestatus(self, init_done):
+    def run(self, init_done):
         if setproctitle:
             setproctitle('%s - Livestatus' % getproctitle())
 

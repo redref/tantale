@@ -39,7 +39,7 @@ class InputServer(object):
         # Initialize Members
         self.config = config
 
-    def input(self, check_queue, init_done):
+    def run(self, check_queue, init_done):
         if setproctitle:
             setproctitle('%s - Input' % getproctitle())
 
@@ -88,7 +88,7 @@ class InputServer(object):
                 else:
                     try:
                         if isinstance(sock, int):
-                            raise
+                            raise Exception('Select call returned int')
 
                         f = sock.makefile()
                         for line in f.readlines():

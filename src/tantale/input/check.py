@@ -13,11 +13,11 @@ class Check(object):
     __slots__ = [
         'type', 'tags', 'id',
         'timestamp', 'hostname', 'check', 'status', 'output',
-        'performance_data',
+        'contact_groups',
     ]
 
     def __init__(self, timestamp=None, hostname=None, check=None,
-                 status=None, output=None, performance_data=None, **tags):
+                 status=None, output=None, contact_groups=None, **tags):
         """
         Create new instance
         """
@@ -35,7 +35,12 @@ class Check(object):
 
         self.check = check
         self.output = output
-        self.performance_data = performance_data
+
+        self.contact_groups = []
+        if contact_groups:
+            for group in contact_groups.split(','):
+                self.contact_groups.append(group)
+
         if tags:
             self.tags = tags
         else:
@@ -52,6 +57,7 @@ class Check(object):
                          '(?P<check>\w+)\s+'
                          '(?P<status>[0-3])\s+'
                          '(?P<output>.*)'
+                         '(|\|(?P<contact_groups>[^|]+))'
                          '.*(\n?)$',
                          string)
         try:

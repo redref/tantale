@@ -22,15 +22,6 @@
           "index": "not_analyzed",
           "type": "string"
         },
-        "performance_data": {
-          "properties": {
-            "name": {
-                "index": "not_analyzed",
-                "type": "string"
-            }
-          },
-          "type": "nested"
-        },
         "tags": {
           "type": "object"
         }

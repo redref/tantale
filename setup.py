@@ -33,17 +33,12 @@ distro = platform.dist()[0]
 distro_major_version = platform.dist()[1].split('.')[0]
 
 data_files = []
+if not running_under_virtualenv():
+    data_files = [
+        ('/usr/share/diamond/handlers', ['src/diamond/fifo.py']),
+    ]
 
-# Are we in a virtenv?
-if running_under_virtualenv():
-    # PIP requires
-    install_requires = ['configobj', ]
-elif distro == ['debian', 'ubuntu']:
-    # Package requires
-    install_requires = ['python-configobj', ]
-else:
-    # PIP requires
-    install_requires = ['configobj', ]
+install_requires = ['configobj', ]
 
 setup(
     name='tantale',

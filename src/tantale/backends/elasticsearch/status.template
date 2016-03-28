@@ -32,7 +32,7 @@
           "format": "epoch_second||strict_date_optional_time||epoch_millis",
           "type": "date"
         },
-        "performance_data": {
+        "contact_groups": {
           "properties": {
             "name": {
                 "index": "not_analyzed",

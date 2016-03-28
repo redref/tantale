@@ -91,7 +91,7 @@ class Server(object):
                     inputserver = InputServer(self.config)
 
                     # Input check Queue
-                    queue_size = int(self.config['server'].get(
+                    queue_size = int(self.config['modules']['Input'].get(
                         'queue_size', 16384))
                     check_queue = l_manager.Queue(maxsize=queue_size)
                     self.log.debug('input_queue_size: %d', queue_size)
@@ -108,7 +108,7 @@ class Server(object):
                     init_events.append(l_manager.Event())
                     processes.append(Process(
                         name="Input",
-                        target=inputserver.input,
+                        target=inputserver.run,
                         args=(check_queue, init_events[-1],),
                     ))
                     self.spawn(processes[-1])
@@ -122,7 +122,21 @@ class Server(object):
                     init_events.append(l_manager.Event())
                     processes.append(Process(
                         name="Livestatus",
-                        target=livestatusserver.livestatus,
+                        target=livestatusserver.run,
+                        args=(init_events[-1],),
+                    ))
+                    self.spawn(processes[-1])
+
+            elif module == 'Client':
+                if str_to_bool(modules[module]['enabled']):
+                    from tantale.client import Client
+                    client = Client(self.config)
+
+                    # Livestatus
+                    init_events.append(l_manager.Event())
+                    processes.append(Process(
+                        name="Client",
+                        target=client.run,
                         args=(init_events[-1],),
                     ))
                     self.spawn(processes[-1])
