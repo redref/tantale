@@ -44,6 +44,7 @@ Database schema is quite simplified then livestatus API is quite truncated.
 >  * hosts
 >  * services
 >  * log
+>  * contactgroups (aggregated data, Cf: Client)
 >  * acknowledge
 >  * downtime (bool flag instead of timed downtime)
 
@@ -52,17 +53,28 @@ Database schema is quite simplified then livestatus API is quite truncated.
 
 ### Input (Custom socket line protocol)
 
-### Nagios_Input (Nagios formatted checks results from a file)
+Internal socket line parser. Parse data sended by Client. 
+
+Very similar to nagios data format but add contact_groups information (from Client configuration)
+
+### Client
+
+> Not finished
+
+This thread/process may be run on hosts as client.
+
+It reads data from:
+  * diamond FIFO file (FIFO handler included in Tantale)
+    * only "range" checks implemented right now
+  * nagios format FIFO file (you may wrap)
+
+then forward it to specified tantale server.
+
+### Active Poller
 
 > Not implemented yet
 
-Also compliant with check-mk output format (same as nagios).
-
-### Poller - needed ?
-
-> Not implemented yet
-
-For now, active poller may be delegated to shinken/nagios
+For now, active poller may be delegated to shinken/nagios. I don't know is this could be really usefull.
 
 ## Inspirations
 
