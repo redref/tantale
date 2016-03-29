@@ -16,6 +16,16 @@ class Check(object):
         'contact_groups',
     ]
 
+    pattern = re.compile(
+        r'^'
+        '(?P<timestamp>[0-9]+)\s+'
+        '(?P<hostname>\w+)\s+'
+        '(?P<check>\w+)\s+'
+        '(?P<status>[0-3])\s+'
+        '(?P<output>.*?)'
+        '(|\|(?P<contact_groups>[^|]+))'
+        '$')
+
     def __init__(self, timestamp=None, hostname=None, check=None,
                  status=None, output=None, contact_groups=None, **tags):
         """
@@ -38,8 +48,7 @@ class Check(object):
 
         self.contact_groups = []
         if contact_groups:
-            for group in contact_groups.split(','):
-                self.contact_groups.append(group)
+            self.contact_groups = contact_groups.split(',')
 
         if tags:
             self.tags = tags
@@ -51,15 +60,7 @@ class Check(object):
         """
         Parse a string and create a check
         """
-        match = re.match(r'^'
-                         '(?P<timestamp>[0-9]+)\s+'
-                         '(?P<hostname>\w+)\s+'
-                         '(?P<check>\w+)\s+'
-                         '(?P<status>[0-3])\s+'
-                         '(?P<output>.*)'
-                         '(|\|(?P<contact_groups>[^|]+))'
-                         '.*(\n?)$',
-                         string)
+        match = re.match(cls.pattern, string)
         try:
             groups = match.groupdict()
             return Check(**groups)

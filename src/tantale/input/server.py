@@ -67,11 +67,12 @@ class InputServer(object):
         def sig_handler(signum, frame):
             self.log.debug("%s received" % signum)
             self.running = False
-            os.write(pipe[1], bytes('END'))
+            os.write(pipe[1], bytes("END\n"))
         signal.signal(signal.SIGTERM, sig_handler)
 
         # Logic
         queue_state = True
+        stack = ""
         while self.running:
             r = None
             try:
@@ -86,14 +87,24 @@ class InputServer(object):
                     sockfd, addr = s.accept()
                     connections.append(sockfd)
                 else:
-                    try:
-                        if isinstance(sock, int):
-                            raise Exception('Select call returned int')
+                    data = sock.recv(4096)
+                    if data == bytes(''):
+                        # Disconnect
+                        connections.remove(sock)
 
-                        f = sock.makefile()
-                        for line in f.readlines():
-                            if line == 'END':
-                                break
+                    data = stack + data.decode('utf-8')
+
+                    while True:
+                        idx = data.find('\n')
+                        if idx == -1:
+                            stack = data
+                            break
+                        line = data[:idx]
+                        data = data[idx + 1:]
+
+                        if line == "END":
+                            break
+                        else:
                             try:
                                 check_queue.put(line, block=False)
                             except Full:
@@ -103,9 +114,6 @@ class InputServer(object):
                                 self.running = False
                                 queue_state = False
                                 break
-                    except:
-                        self.log.debug(traceback.format_exc())
-                        connections.remove(sock)
 
         # Stop backend
         if queue_state:

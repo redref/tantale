@@ -50,7 +50,6 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         if len(requests) > 0:
             res = self.elasticclient.bulk(
                 body="\n".join(requests), index=self.status_index)
-
             if res:
                 if 'errors' in res and res['errors'] != 0:
                     for idx, item in enumerate(res['items']):

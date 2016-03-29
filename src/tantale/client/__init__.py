@@ -34,12 +34,16 @@ class Client(object):
 
         # Save our config
         self.config = config['modules']['Client']
+        self.my_hostname = socket.getfqdn()
 
         # Output config
         self.host = self.config['server_host']
         self.port = int(self.config['server_port'])
         self.sock = None
-        self.contact_groups = self.config['contact_groups']
+        if self.config['contact_groups']:
+            self.contact_groups = ','.join(self.config['contact_groups'])
+        else:
+            self.contact_groups = None
 
         # Diamond input config
         self.diamond_fifo = self.config['diamond']['fifo_file']
@@ -50,6 +54,7 @@ class Client(object):
         # Nagios input config
         self.nagios_fifo = self.config['nagios']['fifo_file']
         self.nagios_fd = None
+        self.nagios_stack = ""
 
     def __del__(self):
         self.close()
@@ -93,8 +98,6 @@ class Client(object):
                     except:
                         self.nagios_fd = None
 
-            print(result)
-            result = '1345677 localhost Host 0 test funkychars ><&(){}[],;:!\n'
             # Send
             if result != "":
                 self.send(result)
@@ -112,9 +115,7 @@ class Client(object):
 
     def read_fifo(self, fifo_fd):
         try:
-            res = os.read(fifo_fd, 4096)
-            print(res)
-            return res
+            return os.read(fifo_fd, 4096)
         except:
             self.log.debug('Trace: %s' % traceback.format_exc())
             os.close(fifo_fd)
@@ -126,8 +127,9 @@ class Client(object):
         self.sock.connect((self.host, self.port))
 
     def close(self):
-        self.sock.shutdown(socket.SHUT_RDWR)
-        self.sock.close()
+        if self.sock:
+            self.sock.shutdown(socket.SHUT_RDWR)
+            self.sock.close()
 
     def send(self, result):
         if not self.sock:
@@ -137,10 +139,51 @@ class Client(object):
             self.log.debug(
                 'Reconnect to %s:%s failed' % (self.host, self.port))
 
-        self.sock.send(bytes(result))
+        if self.contact_groups:
+            result += "|%s\n" % self.contact_groups
+        else:
+            result += "\n"
 
-    def process_diamond(self, input):
-        pass
+        try:
+            self.sock.send(bytes(result))
+        except:
+            pass
+
+    def process_diamond(self, lines):
+        result = ""
+        for line in lines.strip().split('\n'):
+            line_list = line.split(' ')
+
+            for check in self.diamond_checks:
+                if line_list[0].endswith(check):
+                    thresholds = self.diamond_checks[check]
+                    status, output = self.range_check(
+                        check,
+                        thresholds.get('lower_critical', None),
+                        thresholds.get('lower_warning', None),
+                        thresholds.get('upper_warning', None),
+                        thresholds.get('upper_critical', None),
+                        line_list[1],
+                    )
+
+                    result += "%s %s %s %s %s" \
+                        % (
+                            line_list[2], self.my_hostname,
+                            thresholds.get('name', check), status, output)
+
+        return result
+
+    def range_check(self, metric, lc, lw, uw, uc, value):
+        """ Do the comparing maths """
+        message = "%s value %%s than %s" % (metric, value)
+        if lc and float(value) < float(lc):
+            return 2, message % 'lower'
+        elif lw and float(value) < float(lw):
+            return 1, message % 'lower'
+        elif uw and float(value) > float(uw):
+            return 1, message % 'upper'
+        elif uc and float(value) > float(uc):
+            return 2, message % 'upper'
 
     def process_nagios(self, input):
         pass

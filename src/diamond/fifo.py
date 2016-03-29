@@ -26,7 +26,8 @@ class FifoHandler(Handler):
         self.fifo_path = self.config['fifo_path']
 
         if not os.path.exists(self.fifo_path):
-            os.mkfifo(self.fifo_path, self.config['creation_mode'])
+            os.mkfifo(
+                self.fifo_path, int(self.config['creation_mode'], base=8))
         elif not stat.S_ISFIFO(os.stat(self.fifo_path).st_mode):
             self.log.error('FifoHandler: %s is not FIFO file' % self.fifo_path)
             self.enabled = False

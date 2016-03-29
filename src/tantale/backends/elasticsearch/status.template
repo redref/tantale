@@ -33,13 +33,8 @@
           "type": "date"
         },
         "contact_groups": {
-          "properties": {
-            "name": {
-                "index": "not_analyzed",
-                "type": "string"
-            }
-          },
-          "type": "nested"
+          "index": "not_analyzed",
+          "type": "string"
         },
         "tags": {
           "type": "object"

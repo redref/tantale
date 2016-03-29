@@ -41,6 +41,7 @@ fifo_file = /dev/shm/diamond_to_fifo
 [[[[[diskspace.root.byte_percentfree]]]]]
 lower_critical = 10
 lower_warning = 20
+name = fs_root
 
 # Read Nagios formatted checks from FIFO
 [[[nagios]]]
