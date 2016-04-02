@@ -109,7 +109,7 @@ class Query(object):
 
         self.results = []
 
-        # Filter None from filters
+        # Remove None from filters
         self.filters = []
         if filters:
             for filt in filters:
@@ -118,7 +118,7 @@ class Query(object):
         if len(self.filters) == 0:
             self.filters = None
 
-        # Filter None from stats
+        # Remove None from stats
         self.stats = []
         if stats:
             for stat in stats:
@@ -127,25 +127,41 @@ class Query(object):
         if len(self.stats) == 0:
             self.stats = None
 
+    def __repr__(self):
+        result = ""
+        for slot in self.__slots__:
+            if slot not in ('log', 'output_sock'):
+                result += "%s: %s" % (slot, getattr(self, slot, None))
+        return result
+
     def _query(self, backends):
-        # Shortcut on DUMMY Tables
+        """ Do query on backends """
+        # status table / no backend query
         if self.table == "status":
             self.append(STATUS_TABLE)
             return
+
+        # commands table / no logic
         elif self.table == "commands":
             self.append({'name': 'tantale'})
             return
+
+        # hostgroups table / no logic
         elif self.table == "hostgroups":
             self.append({'name': 'tantale', 'alias': 'tantale'})
             return
+
+        # contactgroups table / no logic
         elif self.table == "contactgroups":
             self.append({'name': 'tantale', 'alias': 'tantale'})
             return
+
+        # servicegroups tables / no logic
         elif self.table == "servicegroups":
             self.append({'name': 'tantale', 'alias': 'tantale'})
             return
 
-        # Tables convert to filters
+        # downtimes table / converted to services+hosts query
         elif self.table == 'downtimes':
             self.table = 'services_and_hosts'
             if self.filters:
@@ -153,6 +169,7 @@ class Query(object):
             else:
                 self.filters = [['downtime', '!=', 0]]
 
+        # DO IT
         for backend in backends:
             length = backend._query(self)
 
@@ -162,11 +179,11 @@ class Query(object):
                 self.limit -= length
 
     def append(self, result):
-        # Mapping back to columns
-        # print(result)
+        """ Map back tantale results columns to queried columns """
         if self.columns:
             mapped_res = []
             for field in self.columns:
+                # Remove object related prefix
                 if field.startswith("host_"):
                     field = field[5:]
                 if field.startswith("service_"):
@@ -174,7 +191,7 @@ class Query(object):
                 if field.startswith("log_"):
                     field = field[4:]
 
-                # Map
+                # Search for columns
                 map_name = False
                 if field in result:
                     map_name = field
@@ -184,7 +201,7 @@ class Query(object):
                     mapped_res.append(FIELDS_DUMMY[field])
                     continue
 
-                # Special logics
+                # downtimes table specific
                 elif field == 'downtime_is_service':
                     if result.get('check') == 'Host':
                         mapped_res.append(0)
@@ -214,20 +231,26 @@ class Query(object):
                     mapped_res.append('')
 
             self.results.append(mapped_res)
+
         else:
+            # No columns header / forward results
             self.results.append(result)
 
+        # Debug : print first line of results
         if len(self.results) == 1:
             self.log.debug(
                 'Tantale result (first line):\n%s', str(self.results))
 
+        # Handle line by line printing
         if self.oformat == 'csv' and not self.rheader:
             self._output_line()
 
     def _output_line(self):
+        """ Write result line by line is possible """
         raise NotImplementedError
 
     def _flush(self):
+        """ Dump results to network """
         if self.rheader == 'fixed16':
             string = str(self.results)
             # print('%3d %11d %s\n' % (200, len(string) + 1, string))
@@ -241,6 +264,7 @@ class Query(object):
 
     @classmethod
     def field_map(cls, field, table):
+        """ Map query field to tantale known field """
         if field.startswith("%s_" % table[:-1]):
             field = field[len(table):]
         # Log got no final 's'
@@ -265,6 +289,7 @@ class Query(object):
 
     @classmethod
     def parse_expr(cls, arg_list, table):
+        """ Convert filters to expression list """
         # TOFIX exclude custom_variable_names / not relevant
         # TOFIX for now assume right operand is constant
         if arg_list[0].endswith("custom_variable_names"):
@@ -303,6 +328,7 @@ class Query(object):
 
     @classmethod
     def parse_command(cls, command):
+        """ Parse ACK / DOWNTIME commands """
         args = command.split(';')
         cargs = args[0].split('_')
         query_args = []
@@ -337,7 +363,7 @@ class Query(object):
     @classmethod
     def parse(cls, sock, string):
         """
-        Parse a string and create a livestatus query
+        Parse a string and create a livestatus query object
         """
         method = None
         table = None
@@ -349,8 +375,10 @@ class Query(object):
         try:
             for line in string.split('\n'):
                 members = line.split(' ')
+                # Empty line
                 if members[0] == '':
                     pass
+
                 # Stats
                 elif members[0] == 'Stats:':
                     options['stats'] = options.get('stats', [])
@@ -368,6 +396,7 @@ class Query(object):
                 elif members[0] == 'StatsNegate:':
                     options['stats'][1] = cls.combine_expr(
                         'not', options['stats'][-1])
+
                 # Filters
                 elif members[0] == 'Filter:':
                     options['filters'] = options.get('filters', [])
@@ -386,13 +415,18 @@ class Query(object):
                 elif members[0] == 'Negate:':
                     options['filters'][-1] = cls.combine_expr(
                         'not', options['filters'][-1])
+
                 # Method
                 elif members[0] == 'GET':
                     method = 'GET'
                     table = members[1]
                 elif members[0] == 'COMMAND':
                     return cls.parse_command(members[2])
-                # Optional lines
+
+                # Optional lines / Headers
+                elif members[0] == 'AuthUser:':
+                    options['filters'] = options.get('filters', [])
+                    options['filters'].append(['contacts', '>=', members[1]])
                 elif members[0] == 'Columns:':
                     options['columns'] = members[1:]
                 elif members[0] == 'ColumnHeaders:':
@@ -407,11 +441,13 @@ class Query(object):
                 elif members[0] == 'Limit:':
                     options['limit'] = int(members[1])
                 elif members[0] == 'Localtime:':
+                    # TOFIX no time handling
                     pass
+
+                # Raise error is something not understood
                 else:
                     raise Exception('Unknown command %s' % members[0])
 
-                # print(options)
             return cls(sock, method, table, **options)
         except:
             raise Exception(

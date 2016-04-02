@@ -145,7 +145,10 @@ class Client(object):
 
     def read_fifo(self, fifo_fd):
         try:
-            return os.read(fifo_fd, 4096).decode('utf-8')
+            res = os.read(fifo_fd, 4096).decode('utf-8')
+            if res == '':
+                raise Exception('Reopen FIFO, lost transaction')
+            return res
         except:
             self.log.debug('Trace: %s' % traceback.format_exc())
             os.close(fifo_fd)

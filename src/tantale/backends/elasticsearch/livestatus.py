@@ -12,7 +12,8 @@ from tantale.livestatus.backend import Backend
 
 class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
     def convert_expr(self, field, operator, value=None):
-        # Bool
+        """ Convert tantale expression to elasticsearch filter """
+        # Handle booleans (and/or/not)
         if value is None:
             if field in ('and', 'or'):
                 l = []
@@ -39,13 +40,17 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             else:
                 raise Exception('Unknown boolean operator %s' % field)
 
-        # Special case - parent field
+        # JOIN - wrap into
         related = False
         if field.startswith('host.'):
             related = 'host'
             field = field[5:]
 
-        # Special case - handle null values
+        # Handle columns that are lists to contain filter
+        if field == 'contacts' and operator == '>=':
+            operator = "="
+
+        # Handle columns that can be null
         filt = {}
         if field in ('downtime', 'ack'):
             if value == 0 and operator in ('=', '>'):
@@ -58,6 +63,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             else:
                 raise NotImplementedError
 
+        # Normal
         else:
             # Operators
             filt = {}
@@ -79,7 +85,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             else:
                 raise Exception("Unknown operator %s" % operator)
 
-        # Special case - handle freshness with last_check
+        # Special case - freshness filters
         if field == 'status':
             fresh = (int(time.time()) - self.freshness_timeout) * 1000
             if value == 0:
@@ -109,7 +115,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                         {'range': {'last_check': {'gte': fresh}}}
                     ]}
 
-        # Map back parent fields filter into parent
+        # JOIN - map back in a has_parent filter
         if related:
             filt = {
                 "has_parent": {
@@ -146,24 +152,29 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             raise NotImplementedError
 
     def status_query(self, query, qtype):
+        """ Process GET query over status index """
         if qtype is not None:
             es_meta = {"index": self.status_index, 'type': qtype}
         else:
             es_meta = {"index": self.status_index}
-        return self.search_query(query, es_meta)
+        return self._search_query(query, es_meta)
 
     def logs_query(self, query):
+        """ Process GET query over log indexes """
         es_meta = {"index": "%s-*" % self.log_index, '_type': 'event'}
-        return self.search_query(query, es_meta)
+        return self._search_query(query, es_meta)
 
-    def search_query(self, query, es_meta):
+    def _search_query(self, query, es_meta):
+        """ Internally process GET queries """
         es_query = {}
 
+        # Add filters
         if query.filters:
             es_query = {'filter': {'and': []}}
             for filt in query.filters:
                 es_query['filter']['and'].append(self.convert_expr(*filt))
 
+        # Stats / COUNT query
         if query.stats:
             if 'filter' not in es_query:
                 es_query = {'filter': {'and': []}}
@@ -178,25 +189,31 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
             result = []
             for response in self.elasticclient.msearch(body=body)['responses']:
-                # DEBUG : usefull lines
-                # self.log.debug(
-                #     'Elasticsearch response 1rst line :\n%s' % response)
-                result.append(response['hits']['total'])
+                if 'error' in response:
+                    self.log.debug(
+                        'Elasticsearch error response:\n%s' % response)
+                else:
+                    result.append(response['hits']['total'])
             count = 1
             query.append(result)
+
+        # Normal query / return lines
         else:
-            # DEBUG : comment both next lines to limit results to 5
             if query.limit:
                 es_query['size'] = query.limit
+
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"
             self.log.debug('Elasticsearch requests :\n%s' % body)
 
             response = self.elasticclient.msearch(body=body)['responses'][0]
-            # self.log.debug('Elasticsearch response :\n%s' % response)
+
             if 'error' in response:
-                # Handle empty result
+                # No index or empty query
+                self.log.debug(
+                    'Elasticsearch error response:\n%s' % response)
                 return 0
+
             count = response['hits']['total']
             for hit in response['hits']['hits']:
                 line = hit['_source']

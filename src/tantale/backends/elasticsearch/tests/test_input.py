@@ -18,7 +18,8 @@ class ElasticsearchInputTestCase(ElasticsearchConnectFail, InputTestCase):
 
         timestamp = int(time.time())
         checks = [
-            "%s localhost Host 0 test funkychars ><&(){}[],;:!\n",
+            "%s localhost Host 0 test funkychars ><&(){}[],;:!"
+            "|user_1,user_2\n",
             "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
         ]
         for check in checks:
@@ -43,7 +44,8 @@ class ElasticsearchTestCase(ElasticsearchOk, InputTestCase):
 
         timestamp = int(time.time())
         checks = [
-            "%s localhost Host 0 test funkychars ><&(){}[],;:!\n",
+            "%s localhost Host 0 test funkychars ><&(){}[],;:!"
+            "|user_1,user_2\n",
             "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
         ]
         for check in checks:
