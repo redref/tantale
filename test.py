@@ -207,7 +207,7 @@ class LivestatusTestCase(DaemonTestCase):
 
 
 class ClientTestCase(DaemonTestCase):
-    config_file = 'conf/tantale.conf.example'
+    config_file = 'conf/tantale.client.conf.example'
 
 
 ###############################################################################
@@ -247,6 +247,11 @@ if __name__ == "__main__":
                       default=False,
                       action="store_true",
                       help="log daemon to stdout (messy with verbose)")
+    parser.add_option("-t",
+                      "--test",
+                      dest="test",
+                      default="",
+                      help="Run a single test class (selected by Name")
 
     # Parse Command Line Args
     (options, args) = parser.parse_args()
@@ -274,6 +279,8 @@ if __name__ == "__main__":
     for test in tests:
         if options.nomock:
             test.mock = False
+        if options.test and test.__name__ != options.test:
+            continue
         loaded_tests.append(loader.loadTestsFromTestCase(test))
     suite = unittest.TestSuite(loaded_tests)
     results = unittest.TextTestRunner(verbosity=options.verbose).run(suite)

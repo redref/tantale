@@ -13,7 +13,7 @@ class Check(object):
     __slots__ = [
         'type', 'tags', 'id',
         'timestamp', 'hostname', 'check', 'status', 'output',
-        'contact_groups',
+        'contacts',
     ]
 
     pattern = re.compile(
@@ -23,11 +23,11 @@ class Check(object):
         '(?P<check>\w+)\s+'
         '(?P<status>[0-3])\s+'
         '(?P<output>.*?)'
-        '(|\|(?P<contact_groups>[^|]+))'
+        '(|\|(?P<contacts>[^|]+))'
         '$')
 
     def __init__(self, timestamp=None, hostname=None, check=None,
-                 status=None, output=None, contact_groups=None, **tags):
+                 status=None, output=None, contacts=None, **tags):
         """
         Create new instance
         """
@@ -46,9 +46,9 @@ class Check(object):
         self.check = check
         self.output = output
 
-        self.contact_groups = []
-        if contact_groups:
-            self.contact_groups = contact_groups.split(',')
+        self.contacts = []
+        if contacts:
+            self.contacts = contacts.split(',')
 
         if tags:
             self.tags = tags

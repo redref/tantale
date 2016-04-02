@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+
+fifo=/dev/shm/nagios_fifo
+
+[ -p "${fifo}" ] || mkfifo "${fifo}"
+
+output="$($@)"
+status=$?
+
+echo "[$(date "+%s")] PROCESS_SERVICE_CHECK_RESULT;$(hostname -f);${1};${status};${output}" > ${fifo}

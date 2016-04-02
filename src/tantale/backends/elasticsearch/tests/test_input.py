@@ -64,6 +64,7 @@ class ElasticsearchTestCase(ElasticsearchOk, InputTestCase):
 
 
 class BenchElasticsearchTestCase(ElasticsearchOk, InputTestCase):
+    """ Bench method - can also be used as dummy data provision """
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.batch_size = 4000

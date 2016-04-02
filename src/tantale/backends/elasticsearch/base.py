@@ -20,7 +20,7 @@ Path may be /etc/elasticsearch/scripts/tantale.groovy
 ```
 ctx._source.last_check = timestamp
 ctx._source.output = output
-ctx._source.contact_groups = contact_groups
+ctx._source.contacts = contacts
 
 if (ctx._source.status != status) {
     ctx._source.status = status

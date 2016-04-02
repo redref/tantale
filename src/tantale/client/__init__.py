@@ -7,6 +7,7 @@ import stat
 import signal
 import traceback
 import logging
+import re
 
 import socket
 import select
@@ -40,10 +41,10 @@ class Client(object):
         self.host = self.config['server_host']
         self.port = int(self.config['server_port'])
         self.sock = None
-        if self.config['contact_groups']:
-            self.contact_groups = ','.join(self.config['contact_groups'])
+        if self.config['contacts']:
+            self.contacts = ','.join(self.config['contacts'])
         else:
-            self.contact_groups = None
+            self.contacts = None
 
         # Diamond input config
         self.diamond_fifo = self.config['diamond']['fifo_file']
@@ -55,31 +56,56 @@ class Client(object):
         self.nagios_fifo = self.config['nagios']['fifo_file']
         self.nagios_fd = None
         self.nagios_stack = ""
+        # Drop perfdata here
+        self.pattern = re.compile(
+            r'\[(?P<timestamp>\d+)\] PROCESS_SERVICE_CHECK_RESULT;'
+            '(?P<hostname>[^;]+);'
+            '(?P<check>[^;]+);'
+            '(?P<status>[^;]+);'
+            '(?P<output>.*?)(|\|.*$)'
+        )
 
     def __del__(self):
         self.close()
 
-    def run(self, init_done):
+    def run(self, init_done=None):
         if setproctitle:
             setproctitle('%s - Client' % getproctitle())
 
-        init_done.set()
+        # Gentle out
+        pipe = os.pipe()
+
+        def sig_handler(signum, frame):
+            self.log.debug("%s received" % signum)
+            self.running = False
+            os.write(pipe[1], bytes("END\n"))
+        signal.signal(signal.SIGTERM, sig_handler)
+
+        if init_done:
+            init_done.set()
+
+        self.connect()
 
         while self.running:
             # Open diamond
-            if not self.diamond_fd:
+            if self.diamond_fifo and not self.diamond_fd:
                 self.diamond_fd = self.open_fifo(self.diamond_fifo)
 
             # Open nagios
-            if not self.nagios_fd:
+            if self.nagios_fifo and not self.nagios_fd:
                 self.nagios_fd = self.open_fifo(self.nagios_fifo)
 
             # Wait IO
-            fds = []
+            fds = [pipe[0]]
             for fd in (self.diamond_fd, self.nagios_fd):
                 if fd:
                     fds.append(fd)
-            r, o, e = select.select(fds, [], [], 60)
+
+            try:
+                r, o, e = select.select(fds, [], [], 60)
+            except:
+                # Gentle exit on signal
+                break
 
             # Process
             result = ""
@@ -89,6 +115,8 @@ class Client(object):
                         result += self.process_diamond(
                             self.read_fifo(self.diamond_fd))
                     except:
+                        self.log.debug(
+                            'Diamond error:\n%s' % traceback.format_exc())
                         self.diamond_fd = None
 
                 elif fd == self.nagios_fd:
@@ -96,6 +124,8 @@ class Client(object):
                         result += self.process_nagios(
                             self.read_fifo(self.nagios_fd))
                     except:
+                        self.log.debug(
+                            'Nagios error:\n%s' % traceback.format_exc())
                         self.nagios_fd = None
 
             # Send
@@ -115,7 +145,7 @@ class Client(object):
 
     def read_fifo(self, fifo_fd):
         try:
-            return os.read(fifo_fd, 4096)
+            return os.read(fifo_fd, 4096).decode('utf-8')
         except:
             self.log.debug('Trace: %s' % traceback.format_exc())
             os.close(fifo_fd)
@@ -139,11 +169,6 @@ class Client(object):
             self.log.debug(
                 'Reconnect to %s:%s failed' % (self.host, self.port))
 
-        if self.contact_groups:
-            result += "|%s\n" % self.contact_groups
-        else:
-            result += "\n"
-
         try:
             self.sock.send(bytes(result))
         except:
@@ -166,10 +191,14 @@ class Client(object):
                         line_list[1],
                     )
 
-                    result += "%s %s %s %s %s" \
-                        % (
-                            line_list[2], self.my_hostname,
-                            thresholds.get('name', check), status, output)
+                    result += "%s %s %s %s %s" % (
+                        line_list[2], self.my_hostname,
+                        thresholds.get('name', check), status, output)
+
+                    if self.contacts:
+                        result += "|%s\n" % self.contacts
+                    else:
+                        result += "\n"
 
         return result
 
@@ -184,6 +213,26 @@ class Client(object):
             return 1, message % 'upper'
         elif uc and float(value) > float(uc):
             return 2, message % 'upper'
+        else:
+            return 0, "%s: %s" % (metric, value)
 
-    def process_nagios(self, input):
-        pass
+    def process_nagios(self, lines):
+        result = ""
+        for line in lines.strip().split('\n'):
+            match = re.match(self.pattern, line)
+
+            groups = match.groupdict()
+            result += ' '.join([
+                groups['timestamp'],
+                groups['hostname'],
+                groups['check'],
+                groups['status'],
+                groups['output'],
+            ])
+
+            if self.contacts:
+                result += "|%s\n" % self.contacts
+            else:
+                result += "\n"
+
+        return result

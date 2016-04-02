@@ -32,7 +32,7 @@
           "format": "epoch_second||strict_date_optional_time||epoch_millis",
           "type": "date"
         },
-        "contact_groups": {
+        "contacts": {
           "index": "not_analyzed",
           "type": "string"
         },
