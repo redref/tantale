@@ -12,7 +12,7 @@ from tantale.backends.elasticsearch.tests.mixins \
     import ElasticsearchOk, ElasticsearchConnectFail
 
 
-class ElasticsearchInputTestCase(ElasticsearchConnectFail, InputTestCase):
+class ElasticsearchInputFailTestCase(ElasticsearchConnectFail, InputTestCase):
     def test_FailedConnection(self):
         sock = self.get_socket()
 
@@ -31,13 +31,13 @@ class ElasticsearchInputTestCase(ElasticsearchConnectFail, InputTestCase):
         # TODO tests (logging, handle, ...)
 
 
-class ElasticsearchTestCase(ElasticsearchOk, InputTestCase):
+class ElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
     def setUp(self):
         # Daemon config
         self.config = {'backends': {
             'ElasticsearchBackend': {'batch': 1}
         }}
-        super(ElasticsearchTestCase, self).setUp()
+        super(ElasticsearchInputTestCase, self).setUp()
 
     def test_One(self):
         sock = self.get_socket()
@@ -65,11 +65,11 @@ class ElasticsearchTestCase(ElasticsearchOk, InputTestCase):
         # TOFIX further test on those results
 
 
-class BenchElasticsearchTestCase(ElasticsearchOk, InputTestCase):
+class BenchElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
     """ Bench method - can also be used as dummy data provision """
     def setUp(self):
         # Improve default config in setup (before daemon start)
-        self.batch_size = 4000
+        self.batch_size = 1000
         self.config = {
             'backends': {
                 'ElasticsearchBackend': {
@@ -79,7 +79,7 @@ class BenchElasticsearchTestCase(ElasticsearchOk, InputTestCase):
             },
             'modules': {'Input': {'queue_size': 100000}},
         }
-        super(BenchElasticsearchTestCase, self).setUp()
+        super(BenchElasticsearchInputTestCase, self).setUp()
 
     def test_Mono(self):
         expected_time = float(9)
@@ -113,13 +113,15 @@ class BenchElasticsearchTestCase(ElasticsearchOk, InputTestCase):
 
         print("\nInput bench time %f" % (stop - start))
 
-        # Check call_count
-        bulk_calls = self.mock_class.get_calls()
-        # 4 times how_many - Host/Service + both events
-        wait = int(how_many / self.batch_size * 4)
-        self.assertEqual(
-            len(bulk_calls), wait,
-            "Calls (%d not %d)" % (len(bulk_calls), wait))
+        # Test if mock
+        if getattr(self, 'mock_class', None):
+            # Check call_count
+            bulk_calls = self.mock_class.get_calls()
+            # 4 times how_many - Host/Service + both events
+            wait = int(how_many / self.batch_size * 4)
+            self.assertEqual(
+                len(bulk_calls), wait,
+                "Calls (%d not %d)" % (len(bulk_calls), wait))
 
         # Check time
         self.assertTrue(

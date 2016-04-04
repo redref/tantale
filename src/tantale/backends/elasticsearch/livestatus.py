@@ -219,15 +219,14 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 line = hit['_source']
 
                 # Special case - freshness status
-                if 'last_check' in line:
+                if es_meta['index'] == self.status_index:
+                    if 'last_check' not in line:
+                        line['last_check'] = line['timestamp']
+
                     fresh = (int(time.time()) - self.freshness_timeout) * 1000
                     if line['last_check'] < fresh:
                         line['status'] = 1
                         line['output'] = "OUTDATED: %s" % line['output']
-
-                # Fix newly created checks - no last_check specified (upsert)
-                elif es_meta['index'] == self.status_index:
-                    line['last_check'] = line['timestamp']
 
                 query.append(line)
 
@@ -290,7 +289,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             'id': did,
         }
         if el_type == 'service':
-            kwargs['parent'] = query.columns[1]
+            kwargs['parent'] = did.split('-')[0]
 
         self.log.debug('Elasticsearch update request :\n%s' % str(kwargs))
         response = self.elasticclient.update(**kwargs)

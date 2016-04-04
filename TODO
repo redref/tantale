@@ -1,12 +1,11 @@
 
 LIVESTATUS : acknowledge / downtime comments
 
-LIVESTATUS : logs color / class
-
 INPUT : notifications ? alerting functions ?
 
 LIVESTATUS : not wired logics (necessary ?)
 
-INPUT : host check on service check result
+
+INPUT : host check result on service check result
 
 LIVESTATUS : event (log table) on outdated data

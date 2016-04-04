@@ -56,7 +56,6 @@ FIELDS_DUMMY = {
     "custom_variables": {},
     "class": 1,
     "state_type": 1,
-    "type": '',
     "downtime_start_time": 0,
     "downtime_end_time": 0,
     "downtime_entry_time": 0,
@@ -207,6 +206,14 @@ class Query(object):
                         mapped_res.append(0)
                     else:
                         mapped_res.append(1)
+                    continue
+
+                # log table specific
+                elif self.table == 'log' and field == 'type':
+                    if result['check'] == 'Host':
+                        mapped_res.append('HOST ALERT')
+                    else:
+                        mapped_res.append('SERVICE ALERT')
                     continue
 
                 # Append

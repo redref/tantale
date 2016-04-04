@@ -11,11 +11,11 @@ from tantale.backends.elasticsearch.tests.mixins \
     import ElasticsearchOk, ElasticsearchConnectFail
 
 
-class ElasticsearchTestCase(ElasticsearchOk, LivestatusTestCase):
+class ElasticsearchLivestatusTestCase(ElasticsearchOk, LivestatusTestCase):
     def setUp(self):
         # Daemon config
         self.config = {}
-        super(ElasticsearchTestCase, self).setUp()
+        super(ElasticsearchLivestatusTestCase, self).setUp()
 
     def Queries(self, assertion=True):
         sock = self.get_socket()
@@ -63,11 +63,11 @@ class ElasticsearchTestCase(ElasticsearchOk, LivestatusTestCase):
         self.flush()
 
 
-class BenchElasticsearchTestCase(ElasticsearchOk, LivestatusTestCase):
+class BenchElasticsearchLivestatusTestCase(ElasticsearchLivestatusTestCase):
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.config = {}
-        super(BenchElasticsearchTestCase, self).setUp()
+        super(BenchElasticsearchLivestatusTestCase, self).setUp()
 
     def test_simultaneousRequests(self):
         expected_time = float(1)

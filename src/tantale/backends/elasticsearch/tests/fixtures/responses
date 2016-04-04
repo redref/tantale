@@ -1,14 +1,20 @@
+# Status
 200          32 [['tantale', '1.0', 0, '', '']]
 
+# Host count
 200          12 [[3, 2, 1]]
 
+# Host GET
 200         317 [[0, 1458507032, 0, '', 'OUTDATED: test funkychars ><&(){}[],;:!', '', 1, '', '', [], '', 0, '', 1, '', 1, 1, 'local1', 0, 1, 0, '', '', 'local1', 'elk', ''], [0, 1458507032, 0, '', 'OUTDATED: test funkychars ><&(){}[],;:!', '', 1, '', '', [], '', 0, '', 1, '', 1, 1, 'local2', 0, 1, 0, '', '', 'local2', 'elk', '']]
 
+# Service count
 200          12 [[3, 2, 1]]
 
+# Service GET
 200         477 [[0, 2458507032, 'elk', '', 1, 'local1', '', '', '', '', '', '', 0, 1, '', 1, '', [], '', '', 0, 'test funkychars ><&(){}[],;:!', 0, 1458507032, 'Service', 'local1', 1, 'test funkychars ><&(){}[],;:!', 0, 0, 'elk', 'local1', '', 1, 1, 1], [0, 2458507032, 'elk', '', 1, 'local2', '', '', '', '', '', '', 0, 1, '', 1, '', [], '', '', 0, 'test funkychars ><&(){}[],;:!', 0, 1458507032, 'Service', 'local2', 1, 'test funkychars ><&(){}[],;:!', 0, 0, 'elk', 'local2', '', 1, 1, 1]]
 
-200         167 [[1, 'test funkychars ><&(){}[],;:!', '', 2, '', 'local1', 'Host', 1458507032, ''], [1, 'test funkychars ><&(){}[],;:!', '', 2, '', 'local2', 'Host', 1458507032, '']]
+# Log
+200         193 [[1, 'test funkychars ><&(){}[],;:!', '', 2, '', 'local1', 'Host', 1458507032, 'HOST ALERT'], [1, 'test funkychars ><&(){}[],;:!', '', 2, '', 'local2', 'Service', 1458507032, 'SERVICE ALERT']]
 
 200          14 [['tantale']]
 
