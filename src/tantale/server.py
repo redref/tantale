@@ -113,6 +113,15 @@ class Server(object):
                     ))
                     self.spawn(processes[-1])
 
+                    # Freshness check
+                    if modules[module]['freshness_timeout']:
+                        processes.append(Process(
+                            name="Input Freshness",
+                            target=inputserver.input_freshness,
+                            args=(),
+                        ))
+                        self.spawn(processes[-1])
+
             elif module == 'Livestatus':
                 if str_to_bool(modules[module]['enabled']):
                     from tantale.livestatus.server import LivestatusServer

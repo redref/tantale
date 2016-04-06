@@ -3,9 +3,11 @@
 from __future__ import print_function
 
 import os
+import sys
 import signal
 import traceback
 import logging
+import time
 
 import socket
 import select
@@ -39,6 +41,12 @@ class InputServer(object):
         # Initialize Members
         self.config = config
 
+        self.port = int(self.config['modules']['Input']['port'])
+        self.freshness_timeout = None
+        if self.config['modules']['Input']['freshness_timeout']:
+            self.freshness_timeout = int(
+                self.config['modules']['Input']['freshness_timeout'])
+
     def run(self, check_queue, init_done):
         if setproctitle:
             setproctitle('%s - Input' % getproctitle())
@@ -48,7 +56,7 @@ class InputServer(object):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            port = int(self.config['modules']['Input']['port'])
+            port = self.port
             s.bind(('', port))
         except socket.error as msg:
             self.log.critical('Socket bind failed.')
@@ -129,7 +137,7 @@ class InputServer(object):
         if setproctitle:
             setproctitle('%s - Input_Backend' % getproctitle())
 
-        # Ignore signals
+        # Ignore signals / stop triggered by Input main thread
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
         # Load backends
@@ -163,5 +171,44 @@ class InputServer(object):
                 for backend in backends:
                     backend._flush()
                 self.log.debug('Backends flushed')
+
+        self.log.info("Exit")
+
+    def input_freshness(self):
+        if setproctitle:
+            setproctitle('%s - Input_Freshness' % getproctitle())
+
+        # Signals
+        def sig_handler(signum, frame):
+            self.log.debug("%s received" % signum)
+            self.running = False
+            sys.exit(1)
+        signal.signal(signal.SIGTERM, sig_handler)
+
+        # Load backends
+        backends = []
+        for backend in self.config['backends']:
+            try:
+                cls = load_backend('input', backend)
+                backends.append(
+                    cls(self.config['backends'].get(backend, None)))
+            except:
+                self.log.error('Error loading backend %s' % backend)
+                self.log.debug(traceback.format_exc())
+        if len(backends) == 0:
+            self.log.critical('No available backends')
+            return
+
+        # Logic
+        while self.running:
+            start = int(time.time())
+            for backend in backends:
+                result = backend.update_outdated(
+                    self.freshness_timeout, 2, 'OUTDATED - ')
+
+            exec_time = int(time.time()) - start
+            # wait freshness_timeout / 2
+            if exec_time < (self.freshness_timeout / 2):
+                time.sleep(self.freshness_timeout / 2 - exec_time)
 
         self.log.info("Exit")

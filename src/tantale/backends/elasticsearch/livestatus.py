@@ -85,36 +85,6 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             else:
                 raise Exception("Unknown operator %s" % operator)
 
-        # Special case - freshness filters
-        if field == 'status':
-            fresh = (int(time.time()) - self.freshness_timeout) * 1000
-            if value == 0:
-                if operator == '=':
-                    filt = {'and': [
-                        filt,
-                        {'range': {'last_check': {'gte': fresh}}}
-                    ]}
-                elif operator == '>=':
-                    # Means everything
-                    pass
-                else:
-                    filt = {'or': [
-                        filt,
-                        {'range': {'last_check': {'lt': fresh}}}
-                    ]}
-            elif value == 1:
-                # Handle freshness as warning (value 1)
-                if operator == '=':
-                    filt = {'or': [
-                        {'term': {field: value}},
-                        {'range': {'last_check': {'lt': fresh}}}
-                    ]}
-                else:
-                    filt = {'and': [
-                        {'term': {field: value}},
-                        {'range': {'last_check': {'gte': fresh}}}
-                    ]}
-
         # JOIN - map back in a has_parent filter
         if related:
             filt = {
@@ -217,17 +187,8 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             count = response['hits']['total']
             for hit in response['hits']['hits']:
                 line = hit['_source']
-
-                # Special case - freshness status
-                if es_meta['index'] == self.status_index:
-                    if 'last_check' not in line:
-                        line['last_check'] = line['timestamp']
-
-                    fresh = (int(time.time()) - self.freshness_timeout) * 1000
-                    if line['last_check'] < fresh:
-                        line['status'] = 1
-                        line['output'] = "OUTDATED: %s" % line['output']
-
+                if 'last_check' not in line:
+                    line['last_check'] = line['timestamp']
                 query.append(line)
 
         return count

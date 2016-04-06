@@ -29,6 +29,10 @@ port = 6557
 enabled = True
 port = 2003
 
+# Freshness timeout (warning if check not fresh)
+#  status => 1, ouput prefixed with 'OUTDATED '
+# freshness_timeout = 120
+
 # Maximum number of checks waiting to be processed.
 # When queue is full, new are dropped.
 queue_size = 16384
@@ -38,10 +42,6 @@ queue_size = 16384
 [backends]
 
 [[ElasticsearchBackend]]
-# Livestatus specific option
-#  OUTDATED reported with state = 1
-freshness_timeout = 120
-
 # python-elasticsearch options
 hosts = http://127.0.0.1:9200
 use_ssl = False

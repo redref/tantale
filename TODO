@@ -5,7 +5,6 @@ INPUT : notifications ? alerting functions ?
 
 LIVESTATUS : not wired logics (necessary ?)
 
-
 INPUT : host check result on service check result
 
 LIVESTATUS : event (log table) on outdated data

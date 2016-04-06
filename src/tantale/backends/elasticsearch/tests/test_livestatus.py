@@ -70,8 +70,13 @@ class BenchElasticsearchLivestatusTestCase(ElasticsearchLivestatusTestCase):
         super(BenchElasticsearchLivestatusTestCase, self).setUp()
 
     def test_simultaneousRequests(self):
-        expected_time = float(1)
-        how_many = 80
+        if self.mock:
+            expected_time = float(1)
+            how_many = 80
+        else:
+            # Provide initial data
+            expected_time = float(4)
+            how_many = 50
 
         start = time.time()
 

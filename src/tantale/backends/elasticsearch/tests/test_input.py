@@ -82,8 +82,13 @@ class BenchElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
         super(BenchElasticsearchInputTestCase, self).setUp()
 
     def test_Mono(self):
-        expected_time = float(9)
-        how_many = 20000
+        if self.mock:
+            expected_time = float(9)
+            how_many = 20000
+        else:
+            # Provide initial data
+            expected_time = float(2)
+            how_many = 1000
 
         start = time.time()
 

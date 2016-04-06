@@ -37,17 +37,6 @@ class LivestatusServer(object):
 
         # Load backends
         self.backends = []
-        for backend in self.config['backends']:
-            try:
-                cls = load_backend('livestatus', backend)
-                self.backends.append(
-                    cls(self.config['backends'].get(backend, None)))
-            except:
-                self.log.error('Error loading backend %s' % backend)
-                self.log.debug(traceback.format_exc())
-        if len(self.backends) == 0:
-            self.log.critical('No available backends')
-            return
 
     def handle_livestatus_query(self, sock, request):
         queryobj = Query.parse(sock, request)
@@ -106,6 +95,19 @@ class LivestatusServer(object):
     def run(self, init_done):
         if setproctitle:
             setproctitle('%s - Livestatus' % getproctitle())
+
+        # Load backends
+        for backend in self.config['backends']:
+            try:
+                cls = load_backend('livestatus', backend)
+                self.backends.append(
+                    cls(self.config['backends'].get(backend, None)))
+            except:
+                self.log.error('Error loading backend %s' % backend)
+                self.log.debug(traceback.format_exc())
+        if len(self.backends) == 0:
+            self.log.critical('No available backends')
+            return
 
         # Open listener
         connections = []
