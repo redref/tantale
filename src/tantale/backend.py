@@ -17,7 +17,6 @@ class BaseBackend(object):
         self.log = logging.getLogger('tantale')
 
         self.enabled = True
-        self.checks = []
 
         #
         self.config = ConfigObj()
@@ -30,8 +29,6 @@ class BaseBackend(object):
             self.config['server_error_interval'])
         self._errors = {}
 
-        self.freshness_timeout = int(self.config['freshness_timeout'])
-
         # Initialize Lock
         self.lock = threading.Lock()
 
@@ -40,10 +37,8 @@ class BaseBackend(object):
         Returns the help text for the configuration options
         """
         return {
-            'get_default_config_help': 'get_default_config_help',
             'server_error_interval': ('How frequently to send repeated server '
                                       'errors'),
-            'freshness_timeout': 'Time to consider status invalid',
         }
 
     def get_default_config(self):
@@ -51,21 +46,16 @@ class BaseBackend(object):
         Return the default config
         """
         return {
-            'get_default_config': 'get_default_config',
             'server_error_interval': 120,
-            'freshness_timeout': 300,
         }
 
     def _throttle_error(self, msg, *args, **kwargs):
         """
+        Wrapper around log.error
         Avoids sending errors repeatedly. Waits at least
         `self.server_error_interval` seconds before sending the same error
         string to the error logging facility. If not enough time has passed,
         it calls `log.debug` instead
-
-        Receives the same parameters as `Logger.error` an passes them on to the
-        selected logging function, but ignores all parameters but the main
-        message string when checking the last emission time.
 
         :returns: the return value of `Logger.debug` or `Logger.error`
         """

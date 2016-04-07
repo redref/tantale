@@ -42,6 +42,7 @@ Timestamp returned in update query ()
 
 from __future__ import print_function
 
+import traceback
 from six import string_types
 
 from tantale.backend import BaseBackend
@@ -52,13 +53,13 @@ from elasticsearch.client import Elasticsearch
 
 class ElasticsearchBaseBackend(BaseBackend):
     def __init__(self, config=None):
-        BaseBackend.__init__(self, config)
+        super(ElasticsearchBaseBackend, self).__init__(config)
 
-        # Initialize collector options
+        # Initialize backend options
         self.batch_size = int(self.config['batch'])
         self.backlog_size = int(self.config['backlog_size'])
 
-        # Initialize Elasticsearch client Options
+        # Forward Elasticsearch-py client Options
         if isinstance(self.config['hosts'], string_types):
             self.hosts = [self.config['hosts']]
         else:
@@ -73,12 +74,14 @@ class ElasticsearchBaseBackend(BaseBackend):
         self.sniff_on_connection_fail = str_to_bool(
             self.config['sniff_on_connection_fail'])
 
+        self.request_timeout = int(self.config['request_timeout'])
+
+        # Initialize tantale specific options
         self.status_index = self.config['status_index']
         self.log_index = self.config['log_index']
         self.log_index_rotation = self.config['log_index_rotation']
-        self.request_timeout = int(self.config['request_timeout'])
 
-        # Connect
+        # Trigger first connect
         self.elasticclient = None
         self._connect()
 
@@ -144,32 +147,33 @@ class ElasticsearchBaseBackend(BaseBackend):
 
     def _connect(self):
         """
-        Connect to the server
+        Decorator handling connect and reconnect to the server
         """
-        # Connect to server
-        try:
-            self.elasticclient = Elasticsearch(
-                self.hosts,
-                use_ssl=self.use_ssl,
-                verify_certs=self.verify_certs,
-                ca_certs=self.ca_certs,
-                sniffer_timeout=self.sniffer_timeout,
-                sniff_on_start=self.sniff_on_start,
-                sniff_on_connection_fail=self.sniff_on_connection_fail,
-            )
-            # Log
-            self.log.info(
-                "ElasticsearchBackend: Established connection to "
-                "Elasticsearch cluster %s" % repr(self.hosts))
-        except:
-            # Log Error
-            self._throttle_error("ElasticsearchBackend: Failed to connect")
-            import traceback
+        if self.elasticclient is None:
             self.log.debug(
-                "Connection error stack :\n%s" % traceback.format_exc())
-            # Close Socket
-            self._close()
-            return
+                "ElasticsearchBackend: connect to %s" % repr(self.hosts))
+
+            # Connect to server
+            try:
+                self.elasticclient = Elasticsearch(
+                    self.hosts,
+                    use_ssl=self.use_ssl,
+                    verify_certs=self.verify_certs,
+                    ca_certs=self.ca_certs,
+                    sniffer_timeout=self.sniffer_timeout,
+                    sniff_on_start=self.sniff_on_start,
+                    sniff_on_connection_fail=self.sniff_on_connection_fail,
+                )
+                self.log.info("ElasticsearchBackend: connection established")
+            except:
+                # Log Error
+                self._throttle_error("ElasticsearchBackend: connection failed")
+                self.log.debug("Traceback :\n%s" % traceback.format_exc())
+                # Clean
+                self._close()
+                return None
+        else:
+            return self.elasticclient
 
     def _close(self):
         """

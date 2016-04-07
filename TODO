@@ -8,3 +8,7 @@ LIVESTATUS : not wired logics (necessary ?)
 INPUT : host check result on service check result
 
 LIVESTATUS : event (log table) on outdated data
+
+Client : improve (host check / diamond expressions / nagios tests)
+
+LIVESTATUS: events ordered / ordering (everyone)

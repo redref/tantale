@@ -203,7 +203,7 @@ class InputServer(object):
         while self.running:
             start = int(time.time())
             for backend in backends:
-                result = backend.update_outdated(
+                result = backend.freshness_update(
                     self.freshness_timeout, 2, 'OUTDATED - ')
 
             exec_time = int(time.time()) - start

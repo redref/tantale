@@ -9,6 +9,7 @@ from datetime import datetime
 
 from tantale.backends.elasticsearch.base import ElasticsearchBaseBackend
 from tantale.input.backend import Backend
+from tantale.input.check import Check
 
 
 class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
@@ -24,166 +25,49 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
     def flush(self):
         """
-        Flush queue
+        Flush queue (called on exit)
+        Avoid dropping checks
         """
-        if len(self.checks) != 0:
+        while len(self.checks) > 0:
+            before = len(self.checks)
             self._send()
+            if before == len(self.checks):
+                break
 
-    def _send_data(self):
+    def freshness_update(self, timeout, outdated_status, prefix):
         """
-        Try to send all data in buffer.
+        Fetch then Update to enforce freshness_timeout
+        timeout : validity time for checks
+        outdated_status : status to be applied on outdated
+        prefix : output prefix to apply on outdated
         """
-        requests = []
-        for check in self.checks:
-            head = {"_type": check.type, "_id": check.id}
-            if check.type == 'service':
-                head['parent'] = check.hostname
-            requests.append(json.dumps({"update": head}))
-
-            obj = {}
-            for slot in check.__slots__:
-                if slot not in ('type', 'id'):
-                    obj[slot] = getattr(check, slot, None)
-            obj['timestamp'] = obj['timestamp'] * 1000
-            requests.append(json.dumps({
-                "fields": ["timestamp"], 'upsert': obj,
-                "script": {"file": "tantale", "params": obj}}))
-
-        if len(requests) > 0:
-            res = self.elasticclient.bulk(
-                body="\n".join(requests), index=self.status_index)
-            if res:
-                if 'errors' in res and res['errors'] != 0:
-                    for idx, item in enumerate(res['items']):
-                        if 'error' in item['update']:
-                            self.log.debug(
-                                "ElasticsearchBackend: %s" % repr(item))
-                            self.log.debug(
-                                "ElasticsearchBackend: "
-                                "Failed source : %s" % repr(self.checks[idx]))
-                    self.log.error("ElasticsearchBackend: Errors sending data")
-                    raise Exception("Elasticsearch Cluster returned problem")
-
-                if 'items' in res:
-                    return res['items']
-
-        return None
-
-    def _send_logs(self, res):
-        requests = []
-        for idx, check in enumerate(self.checks):
-            # Logs / Events
-            if self.log_index_rotation == 'daily':
-                index = "%s-%s" % (
-                    self.log_index,
-                    datetime.fromtimestamp(
-                        check.timestamp).strftime('%Y.%m.%d')
-                )
-            elif self.log_index_rotation == 'hourly':
-                index = "%s-%s" % (
-                    self.log_index,
-                    datetime.fromtimestamp(
-                        check.timestamp).strftime('%Y.%m.%d.%H')
-                )
-            else:
-                index = self.log_index
-
-            if (
-                'update' in res[idx] and 'get' in res[idx]['update'] and
-                (check.timestamp * 1000) !=
-                res[idx]['update']['get']['fields']['timestamp'][0]
-            ):
-                head = {"_type": "event", "_id": check.id, "_index": index}
-                requests.append(json.dumps({"index": head}))
-
-                obj = {}
-                for slot in check.__slots__:
-                    if slot not in ('type', 'id'):
-                        obj[slot] = getattr(check, slot, None)
-                obj['timestamp'] = obj['timestamp'] * 1000
-                requests.append(json.dumps(obj))
-
-        if len(requests) > 0:
-            res = self.elasticclient.bulk(body="\n".join(requests))
-
-            if 'errors' in res and res['errors'] != 0:
-                for idx, item in enumerate(res['items']):
-                    if 'error' in item['update']:
-                        self.log.debug(
-                            "ElasticsearchBackend: %s" % repr(item))
-                        self.log.debug(
-                            "ElasticsearchBackend: "
-                            "Failed source : %s" % repr(self.checks[idx]))
-                self.log.error("ElasticsearchBackend: Errors sending logs")
-                raise Exception("Elasticsearch Cluster returned problem")
-
-    def _send(self):
-        """
-        Send data. Queue on error
-        """
-        # Check to see if we have a valid connection. If not, try to connect.
         try:
-            if self.elasticclient is None:
-                self.log.debug("ElasticsearchBackend: not connected. "
-                               "Reconnecting")
-                self._connect()
-
-            if self.elasticclient is None:
-                self.log.debug("ElasticsearchBackend: Reconnect failed")
-            else:
-                try:
-                    # Send data
-                    res = self._send_data()
-                    if res:
-                        self._send_logs(res)
-                    else:
-                        self.log.info(
-                            'ElasticsearchBackend: no events to send')
-                    self.checks = []
-                except Exception:
-                    import traceback
-                    self._throttle_error("ElasticsearchBackend: "
-                                         "Error sending checks %s" %
-                                         traceback.format_exc())
-        finally:
-            # self.log.debug("%d checks in queue" % len(self.checks))
-            if len(self.checks) > self.backlog_size:
-                trim_offset = (self.backlog_size * -1 + self.batch_size)
-                self.log.warn('ElasticsearchBackend: Trimming backlog. '
-                              'Removing oldest %d and '
-                              'keeping newest %d checks',
-                              len(self.checks) - abs(trim_offset),
-                              abs(trim_offset))
-                self.checks = self.checks[trim_offset:]
-
-    def update_outdated(self, timeout, outdated_status, prefix):
-        try:
-            max_time = (int(time.time()) - timeout) * 1000
-            es_query = {
-                'size': self.batch_size,
-                'version': True,
+            min_ts = (int(time.time()) - timeout) * 1000
+            search_body = json.dumps({
+                'size': self.batch_size, 'version': True,
                 'filter': {"and": [
                     {'or': [
-                        {'range': {'last_check': {'lt': max_time}}},
+                        {'range': {'last_check': {'lt': min_ts}}},
                         {'and': [
                             {'not': {'exists': {'field': 'last_check'}}},
-                            {'range': {'timestamp': {'lt': max_time}}},
+                            {'range': {'timestamp': {'lt': min_ts}}},
                         ]},
                     ]},
                     {"not": {"prefix": {"output": prefix}}},
                 ]}
-            }
-            sbody = json.dumps(es_query)
+            })
 
             while True:
-                # Refresh before redo request
+                # Refresh (before redo request)
                 self.elasticclient.indices.refresh(index=self.status_index)
+
+                # GET
                 result = self.elasticclient.search(
-                    index=self.status_index, body=sbody)
+                    index=self.status_index, body=search_body)
 
                 if 'hits' not in result:
                     self.log.debug(
-                        "ElasticsearchBackend: Failed to get outdated checks"
+                        "ElasticsearchBackend: failed to get outdated"
                         "\n%s" % result)
                     break
 
@@ -191,7 +75,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     # Normal end here
                     break
 
-                # Generate bulk update body
+                # Generate bulk update
                 body = ""
                 for hit in result['hits']['hits']:
                     # Change status to 1 and output prefix
@@ -207,6 +91,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     else:
                         output = hit['_source']['output']
 
+                    # If changed, construct request
                     if changed:
                         # Metadata for an update
                         metadata = {"update": {
@@ -220,30 +105,184 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                         body += json.dumps(metadata)
                         body += "\n"
 
-                        # Update fields
-                        body += json.dumps({"refresh": True, "doc": {
-                            "output": output,
-                            "status": status,
-                            "last_check": int(time.time()) * 1000,
-                        }})
+                        # Update fields (and retrieve doc)
+                        body += json.dumps({
+                            "refresh": True, "fields": Check.log_fields,
+                            "doc": {
+                                "output": output,
+                                "status": status,
+                                "last_check": int(time.time()) * 1000}})
                         body += "\n"
 
                 # Do bulk
                 if body != "":
                     bulk_result = self.elasticclient.bulk(body=body)
 
-                    if 'items' not in bulk_result:
-                        raise Exception(
-                            'Failed to send bulk request %s' % bulk_result)
+                    if not bulk_result or 'items' not in bulk_result:
+                        raise Exception(bulk_result)
 
-                    # TOFIX : some update problem with version and cache
                     for item in bulk_result['items']:
+                        # Log errors
                         if 'error' in item["update"]:
-                            raise Exception(
-                                'Failed to update with error %s' % bulk_result)
+                            self.log.debug(
+                                "ElasticsearchBackend: failed to update "
+                                "outdated with error %s" % bulk_result)
+                        # Forward update to _send_to_logs
+                        try:
+                            fields = item['update']['get']['fields']
+                            log = {}
+                            for field in fields:
+                                if field == 'last_check':
+                                    log['timestamp'] = fields['last_check'][0]
+                                else:
+                                    log[field] = fields[field][0]
+                            self.logs.append(log)
+                        except:
+                            self.log.warn(
+                                "ElasticsearchBackend: log_outdated error")
+                            self.log.debug(
+                                "Trace :\n%s" % traceback.format_exc())
+
+                    self._send_to_logs()
 
         except SystemExit:
+            # Handle process exit
             raise
         except:
-            self.log.info("ElasticsearchBackend: unable to update outdated")
+            self.log.info("ElasticsearchBackend: failed to update outdated")
             self.log.debug("Trace:\n%s" % traceback.format_exc())
+
+    def _send_to_status(self):
+        """
+        Send batch_size checks to status index
+        """
+        body = ""
+        sources = []
+        while len(sources) <= self.batch_size:
+            if len(self.checks) == 0:
+                break
+
+            check = self.checks.pop(0)
+
+            # Request metadata
+            es_meta = {"_type": check.type, "_id": check.id}
+            if check.type == 'service':
+                es_meta['parent'] = check.hostname
+            body += json.dumps({"update": es_meta})
+            body += "\n"
+
+            # Request document
+            obj = {}
+            for slot in check.fields:
+                obj[slot] = getattr(check, slot, None)
+
+            # Timestamp in milliseconds
+            obj['timestamp'] = obj['timestamp'] * 1000
+
+            # Call tantale groovy script (maintain statuses)
+            sources.append(obj)
+            body += json.dumps({
+                "fields": ["timestamp"], 'upsert': obj,
+                "script": {"file": "tantale", "params": obj}})
+            body += "\n"
+
+        # Do it and handle
+        if body != "":
+            res = self.elasticclient.bulk(body=body, index=self.status_index)
+            if res:
+                # Handle errors
+                if 'errors' in res and res['errors'] != 0:
+                    status = False
+
+                    # On errors, search errored items, log it, drop it
+                    for idx, item in enumerate(res['items']):
+                        if 'error' in item['update']:
+                            self.log.debug(
+                                "ElasticsearchBackend: send error - %s" % item)
+                            self.log.debug(
+                                "ElasticsearchBackend: send error source - "
+                                "%s" % sources[idx])
+                            res['items'].remove(idx)
+
+                    self.log.warn("ElasticsearchBackend: send error found")
+
+                # Construct logs list (if timestamp changed)
+                if 'items' in res:
+                    for idx, item in enumerate(res['items']):
+                        try:
+                            ts = item['update']['get']['fields']['timestamp']
+                            if sources[idx]['timestamp'] <= ts[0]:
+                                self.logs.append(sources[idx])
+                        except:
+                            self.log.warn(
+                                "ElasticsearchBackend: send_res parse error")
+                            self.log.debug(
+                                "Trace :\n%s" % traceback.format_exc())
+
+    def _send_to_logs(self):
+        body = ""
+        while len(self.logs) > 0:
+            log = self.logs.pop(0)
+
+            # Determine log index (with log timestamp)
+            if self.log_index_rotation == 'daily':
+                index = "%s-%s" % (
+                    self.log_index,
+                    datetime.fromtimestamp(
+                        int(log['timestamp'] / 1000)).strftime('%Y.%m.%d')
+                )
+            elif self.log_index_rotation == 'hourly':
+                index = "%s-%s" % (
+                    self.log_index,
+                    datetime.fromtimestamp(
+                        int(log['timestamp'] / 1000)).strftime('%Y.%m.%d.%H')
+                )
+            else:
+                index = self.log_index
+
+            # Request metadata
+            body += json.dumps({
+                "index": {"_type": "event", "_index": index}})
+            body += "\n"
+
+            # Request document
+            body += json.dumps(log)
+            body += "\n"
+
+        if body != "":
+            res = self.elasticclient.bulk(body=body)
+
+            if 'errors' in res and res['errors'] != 0:
+                self.log.warn("ElasticsearchBackend: log_send error found")
+
+    def _send(self):
+        """
+        Send data. Queue on error
+        """
+        if not self._connect():
+            self._throttle_error(
+                "ElasticsearchBackend: not connected, queuing")
+            return
+
+        try:
+            # Send to status
+            self._send_to_status()
+            # Send to logs
+            if len(self.logs) > 0:
+                self._send_to_logs()
+            else:
+                self.log.debug('ElasticsearchBackend: no events to send')
+
+        except Exception:
+            self._throttle_error(
+                "ElasticsearchBackend: uncatched error sending checks")
+            self.log.debug("Trace :\n%s" % traceback.format_exc())
+
+        finally:
+            # Trim
+            if len(self.checks) > self.backlog_size:
+                trim_offset = (self.backlog_size * -1 + self.batch_size)
+                self.log.warn(
+                    "ElasticsearchBackend: trimming backlog (keep %d on %d)" %
+                    len(self.checks) - abs(trim_offset), abs(trim_offset))
+                self.checks = self.checks[trim_offset:]

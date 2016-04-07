@@ -48,6 +48,7 @@ class ElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
             "|user_1,user_2\n",
             "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
         ]
+
         for check in checks:
             sock.send(bytes(check % timestamp))
 
@@ -61,8 +62,6 @@ class ElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
             "Calls (%s not %s): %s" % (
                 len(bulk_calls), wait,
                 '\n' + '\n'.join([str(call) for call in bulk_calls])))
-
-        # TOFIX further test on those results
 
 
 class BenchElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):

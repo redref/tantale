@@ -8,6 +8,18 @@ from tantale.backend import BaseBackend
 
 
 class Backend(BaseBackend):
+    def __init__(self, config=None):
+        super(Backend, self).__init__(config)
+
+        self.checks = []
+        self.logs = []
+
+    def get_default_config_help(self):
+        return super(Backend, self).get_default_config_help()
+
+    def get_default_config(self):
+        return super(Backend, self).get_default_config()
+
     def _process(self, check):
         """
         Decorator for processing with a lock, catching exceptions

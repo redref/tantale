@@ -15,6 +15,13 @@ class Check(object):
         'timestamp', 'hostname', 'check', 'status', 'output',
         'contacts',
     ]
+    # Relevant attributes (backend POV)
+    fields = [
+        'timestamp', 'hostname', 'check', 'status', 'output',
+        'contacts']
+    # Relevant attributes (backend logs POV)
+    log_fields = [
+        'last_check', 'hostname', 'check', 'status', 'output']
 
     pattern = re.compile(
         r'^'
