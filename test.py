@@ -2,6 +2,7 @@
 # coding=utf-8
 
 from __future__ import print_function
+
 import os
 import sys
 import imp
@@ -11,23 +12,16 @@ import unittest
 import inspect
 import socket
 import time
-import signal
-from multiprocessing import Process, Manager, Event, active_children
+import traceback
+from multiprocessing import Process, Event
+from six import binary_type
+from six import b as bytes
 
 # Fix path
 path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'src')
 sys.path.insert(0, path)
-
-# DaemonTestCase Deps
-from tantale.utils import DebugFormatter
-from tantale.server import Server
-
-try:
-    from mock import ANY, call, MagicMock, Mock, mock_open, patch
-except ImportError:
-    from unittest.mock import ANY, call, MagicMock, Mock, mock_open, patch
 
 try:
     from setproctitle import setproctitle
@@ -36,7 +30,7 @@ except ImportError:
 
 
 ###############################################################################
-def getTests(mod_name, src=None, class_prefix="", bench=False):
+def getTests(mod_name, src=None, class_prefix=""):
     if src is None:
         src = sys.path
 
@@ -56,28 +50,26 @@ def getTests(mod_name, src=None, class_prefix="", bench=False):
         basename = os.path.basename(pathname)
         if (
             os.path.isfile(pathname) and
-            len(pathname) > 3 and
+            len(pathname) > 4 and
             basename[-3:] == '.py' and
             basename[0:4] == 'test'
         ):
             for name, c in inspect.getmembers(mod, inspect.isclass):
-                if name.startswith('Bench'):
-                    if not bench:
-                        continue
-                else:
-                    if bench:
-                        continue
                 if not issubclass(c, unittest.TestCase):
                     continue
                 tests.append(c)
 
-        # Recurse
+        # Recurse on directoy
         if os.path.isdir(pathname):
             for f in os.listdir(pathname):
+
+                # File only if test*.py
                 if len(f) > 4 and f[:3] == 'tes' and f[-3:] == '.py':
                     tests.extend(getTests(
                         f[:-3], mod.__path__,
-                        "%s_%s" % (class_prefix, mod_name), bench))
+                        "%s_%s" % (class_prefix, mod_name)))
+
+                # Recurse on python module folders
                 elif (
                     not f.startswith('_') and
                     os.path.isdir(os.path.join(pathname, f)) and
@@ -85,11 +77,12 @@ def getTests(mod_name, src=None, class_prefix="", bench=False):
                 ):
                     tests.extend(getTests(
                         f, mod.__path__,
-                        "%s_%s" % (class_prefix, mod_name), bench))
+                        "%s_%s" % (class_prefix, mod_name)))
+
     except:
-        import traceback
         print("Failed to import module: %s\n %s" % (
             mod_name, traceback.format_exc()))
+        return
 
     return tests
 
@@ -103,6 +96,9 @@ class SocketClient(object):
         self.sock.connect(dst)
 
     def send(self, msg):
+        if not isinstance(msg, binary_type):
+            msg = bytes(msg)
+
         totalsent = 0
         MSGLEN = len(msg)
         while totalsent < MSGLEN:
@@ -111,56 +107,62 @@ class SocketClient(object):
                 raise RuntimeError("socket connection broken")
             totalsent = totalsent + sent
 
-    def recv(self, size):
+    def recv(self, size=4096):
         return self.sock.recv(size)
 
     def close(self):
-        # Wait mock to write data
-        time.sleep(0.5)
-
         self.sock.shutdown(socket.SHUT_RDWR)
         self.sock.close()
 
 
-class DaemonTestCase(unittest.TestCase):
-    mock = True
+class TantaleTC(unittest.TestCase):
+    bench = False
     config_file = 'conf/tantale.conf.example'
+    client_config = 'conf/tantale.client.conf.example'
 
     def setUp(self):
-        # Call mocking routine
-        if self.mock and hasattr(self, 'mocking'):
-            self.mocking()
+        from tantale.server import Server
+        self.server = Server(
+            configfile=os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                self.config_file))
 
         # Daemon handle
         self.ready = Event()
-        self.daemon_p = Process(target=self.launch)
+        self.daemon_p = Process(target=self._launch)
+
+    def tearDown(self):
+        """ Stop anyway """
+        self.stop()
+
+    def start(self):
+        """ Start the daemon """
         self.daemon_p.start()
 
         # Wait daemon ready
-        for i in range(100):
-            if self.ready.is_set():
-                break
-            time.sleep(0.1)
+        self.ready.wait(10)
 
-    def launch(self):
-        """ Launch tantale daemon to test it """
-        server = Server(
-            configfile=os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                self.config_file),
-            config_adds=getattr(self, 'config', None))
+    def stop(self):
+        """
+        Terminate daemon
+        Need to be called explicitely in test in order to get
+        coverage data
+        """
+        if self.daemon_p and self.daemon_p.is_alive():
+            self.daemon_p.terminate()
+            self.daemon_p.join()
+            self.daemon_p = None
 
-        # Run handle
+    def _launch(self):
+        """ Internally launch tantale daemon """
         def __onInitDone():
             self.ready.set()
 
-        server.run(__onInitDone)
+        self.server.run(__onInitDone)
 
-    def flush(self):
-        """ Terminate daemon """
-        self.daemon_p.terminate()
-        self.daemon_p.join()
-        self.daemon_p = None
+    def getSocket(self, module):
+        port = self.server.config['modules'][module]['port']
+        return SocketClient(('127.0.0.1', int(port)))
 
     def getFixtureDirPath(self):
         path = os.path.join(
@@ -180,35 +182,20 @@ class DaemonTestCase(unittest.TestCase):
         with open(filepath, 'r') as f:
             return f.read()
 
-    def tearDown(self):
-        if self.daemon_p:
-            self.daemon_p.terminate()
-            self.daemon_p.join()
+    def getParsedFixture(self, path):
+        fixtures = []
+        request = ""
+        for line in self.getFixture(path).split('\n'):
+            if line.startswith('#'):
+                continue
 
-        if self.mock and hasattr(self, 'unmocking'):
-            self.unmocking()
+            if line == '' and request != "":
+                fixtures.append(request)
+                request = ""
+            else:
+                request += "%s\n" % line
 
-    def assertEqual(self, *args, **kwargs):
-        """ Override assert when mock is off """
-        if self.mock:
-            return super(DaemonTestCase, self).assertEqual(*args, **kwargs)
-        else:
-            return True
-
-
-class InputTestCase(DaemonTestCase):
-    def get_socket(self):
-        return SocketClient(('127.0.0.1', 2003))
-
-
-class LivestatusTestCase(DaemonTestCase):
-    def get_socket(self):
-        return SocketClient(('127.0.0.1', 6557))
-
-
-class ClientTestCase(DaemonTestCase):
-    config_file = 'conf/tantale.client.conf.example'
-
+        return fixtures
 
 ###############################################################################
 if __name__ == "__main__":
@@ -241,22 +228,17 @@ if __name__ == "__main__":
                       default=False,
                       action="store_true",
                       help="set log level to DEBUG (instead INFO)")
-    parser.add_option("-n",
-                      "--no-mock",
-                      dest="nomock",
-                      default=False,
-                      action="store_true",
-                      help="log daemon to stdout (messy with verbose)")
     parser.add_option("-t",
                       "--test",
                       dest="test",
                       default="",
-                      help="Run a single test class (selected by Name")
+                      help="Run a single test class (by ClassName")
 
     # Parse Command Line Args
     (options, args) = parser.parse_args()
 
-    # disable normal logging
+    # Disable normal logging
+    from tantale.utils import DebugFormatter
     log = logging.getLogger("tantale")
     handler = logging.StreamHandler(sys.stderr)
     log.addHandler(handler)
@@ -271,22 +253,28 @@ if __name__ == "__main__":
         log.disabled = True
 
     # Load
-    tests = getTests('tantale', bench=options.bench)
-
-    # Init test
+    tests = getTests('tantale')
     loaded_tests = []
     loader = unittest.TestLoader()
     for test in tests:
-        if options.nomock:
-            test.mock = False
+
+        # Supply bench mode
+        if options.bench:
+            test.bench = True
+
+        # Keep only selected test
         if options.test and test.__name__ != options.test:
             continue
         loaded_tests.append(loader.loadTestsFromTestCase(test))
+
+    # Run tests
     suite = unittest.TestSuite(loaded_tests)
     results = unittest.TextTestRunner(verbosity=options.verbose).run(suite)
 
+    # Manage status output
     results = str(results)
     results = results.replace('>', '').split()[1:]
+
     resobj = {}
     for result in results:
         result = result.split('=')

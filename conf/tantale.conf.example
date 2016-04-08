@@ -58,7 +58,7 @@ log_index_rotation = 'daily'
 request_timeout = 30
 
 # Backend specific options
-batch = 10 # group checks update by X
+batch = 2 # group checks update by X
 backlog_size = 50 # keep X checks into memory when backend failing (before trim)
 
 ################################################################################

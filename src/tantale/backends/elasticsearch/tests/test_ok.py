@@ -7,19 +7,82 @@ import json
 import random
 from six import b as bytes
 
-from test import InputTestCase
-from tantale.backends.elasticsearch.tests.mixins \
-    import ElasticsearchOk, ElasticsearchConnectFail
+import configobj
+from test import TantaleTC
 
 
+class ElasticsearchTC(TantaleTC):
+    def randStatus(self):
+        # Push some failed checks
+        state = random.randrange(0, 29)
+        if state < 27:
+            state = 0
+        elif state == 27:
+            state = 1
+        elif state == 28:
+            state = 2
+        elif state == 29:
+            state = 3
+        return state
+
+    def test_Workflow(self):
+        if self.bench:
+            config = {'backends': {
+                'ElasticsearchBackend': {'batch': 1000}
+            }}
+            hosts_nb = 4000
+            services_per_host = 3
+        else:
+            config = {}
+            hosts_nb = 1
+            services_per_host = 3
+
+        # Start the daemon (merging config addins)
+        self.server.config.merge(configobj.ConfigObj(config))
+        self.start()
+
+        #
+        # Input
+        #
+        input_s = self.getSocket('Input')
+        # Generate some checks
+        checks = []
+        for host in range(hosts_nb):
+            checks.append((int(time.time()), host, self.randStatus()))
+            input_s.send(
+                "%d host_%d Host %d output ><&(){}[],;:!\\"
+                "|user_1,user_2\n" % checks[-1])
+
+            for service in range(services_per_host):
+                checks.append((int(time.time()), host, self.randStatus()))
+                input_s.send(
+                    "%d host_%d Host %d output %%|user_1,user_2\n" %
+                    checks[-1])
+        input_s.close()
+
+        #
+        # Livestatus get
+        #
+        live_s = self.getSocket('Livestatus')
+        requests = self.getParsedFixture('requests')
+
+        live_s.send(requests[0] + "\n")
+        a = live_s.recv()
+        print(a)
+        print(requests)
+
+        # Stop the daemon
+        self.stop()
+
+
+"""
 class ElasticsearchInputFailTestCase(ElasticsearchConnectFail, InputTestCase):
     def test_FailedConnection(self):
         sock = self.get_socket()
 
-        timestamp = int(time.time())
+        
         checks = [
-            "%s localhost Host 0 test funkychars ><&(){}[],;:!"
-            "|user_1,user_2\n",
+            
             "%s localhost Service 0 test funkychars ><&(){}[],;:!\n",
         ]
         for check in checks:
@@ -65,7 +128,6 @@ class ElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
 
 
 class BenchElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
-    """ Bench method - can also be used as dummy data provision """
     def setUp(self):
         # Improve default config in setup (before daemon start)
         self.batch_size = 1000
@@ -132,3 +194,4 @@ class BenchElasticsearchInputTestCase(ElasticsearchOk, InputTestCase):
             (stop - start) < expected_time,
             "Runtime too long (more than %s) - %s secs" %
             (expected_time, (stop - start)))
+"""

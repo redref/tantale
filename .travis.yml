@@ -1,25 +1,33 @@
+# Testing done in tox - setup env with 2.8
 sudo: false
-
 language: python
 python:
-  - "2.7"
+  - "3.4"
 
+# Necessary to setup elastic
+services:
+  - elasticsearch
+
+before_script:
+  - sleep 10
+
+# All ens
 env:
- - TOX_ENV=py27
- - TOX_ENV=py33
- - TOX_ENV=py34
- - TOX_ENV=pep8
+  - TOX_ENV=py27
+  - TOX_ENV=py33
+  - TOX_ENV=py34
+  - TOX_ENV=pep8
 
 cache:
   directories:
     - $HOME/.cache/pip
 
 install:
-    - pip install tox
-    - pip install coveralls
+  - pip install tox
+  - pip install coveralls
 
 script:
-    - tox -e $TOX_ENV
+  - tox -e $TOX_ENV
 
 after_success:
-    coveralls
+  - coveralls

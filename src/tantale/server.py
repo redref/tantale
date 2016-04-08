@@ -23,15 +23,14 @@ class Server(object):
     """
     Loads and start configured functions
     """
-    def __init__(self, configfile, config_adds=None):
+    def __init__(self, configfile):
         # Initialize Logging
         self.log = logging.getLogger('tantale')
         # Process signal
         self.running = True
         # Initialize Members
         self.configfile = configfile
-        self.config_adds = config_adds
-        self.config = None
+        self.config = self.load_config(self.configfile)
 
     def load_config(self, configfile):
         """
@@ -39,9 +38,6 @@ class Server(object):
         """
         config = configobj.ConfigObj(config_min)
         config.merge(configobj.ConfigObj(os.path.abspath(configfile)))
-        if self.config_adds:
-            config.merge(configobj.ConfigObj(self.config_adds))
-
         return config
 
     def spawn(self, process):
