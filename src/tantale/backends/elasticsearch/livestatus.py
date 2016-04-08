@@ -130,8 +130,9 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         return self._search_query(query, es_meta)
 
     def logs_query(self, query):
-        """ Process GET query over log indexes """
-        es_meta = {"index": "%s-*" % self.log_index, '_type': 'event'}
+        """ Process GET query over log indexes (with sort) """
+        es_meta = {"index": "%s-*" % self.log_index, '_type': 'event',
+                   'sort': [{"timestamp": "desc"}]}
         return self._search_query(query, es_meta)
 
     def _search_query(self, query, es_meta):
