@@ -195,14 +195,18 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     status = False
 
                     # On errors, search errored items, log it, drop it
-                    for idx, item in enumerate(res['items']):
+                    idx = 0
+                    while len(res['items']) > idx:
+                        item = res['items'][idx]
                         if 'error' in item['update']:
                             self.log.debug(
                                 "ElasticsearchBackend: send error - %s" % item)
                             self.log.debug(
                                 "ElasticsearchBackend: send error source - "
                                 "%s" % sources[idx])
-                            res['items'].remove(idx)
+                            res['items'].pop(idx)
+                        else:
+                            idx += 1
 
                     self.log.warn("ElasticsearchBackend: send error found")
 
@@ -224,21 +228,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         while len(self.logs) > 0:
             log = self.logs.pop(0)
 
-            # Determine log index (with log timestamp)
-            if self.log_index_rotation == 'daily':
-                index = "%s-%s" % (
-                    self.log_index,
-                    datetime.fromtimestamp(
-                        int(log['timestamp'] / 1000)).strftime('%Y.%m.%d')
-                )
-            elif self.log_index_rotation == 'hourly':
-                index = "%s-%s" % (
-                    self.log_index,
-                    datetime.fromtimestamp(
-                        int(log['timestamp'] / 1000)).strftime('%Y.%m.%d.%H')
-                )
-            else:
-                index = self.log_index
+            index = self.get_log_index(int(log['timestamp'] / 1000))
 
             # Request metadata
             body += json.dumps({

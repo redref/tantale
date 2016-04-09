@@ -1,4 +1,4 @@
-# Status
+# status
 GET status
 Columns: livestatus_version program_version program_start num_hosts num_services
 Localtime: 1458332296
@@ -6,8 +6,7 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
-# Stats on hosts
+# hosts_stats
 GET hosts
 Stats: state >= 0
 Stats: state > 0
@@ -23,8 +22,7 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
-#
+# hosts_get
 GET hosts
 Columns: host_scheduled_downtime_depth host_last_state_change host_pnpgraph_present host_icon_image host_plugin_output host_is_flapping host_in_notification_period host_action_url_expanded host_modified_attributes_list host_downtimes host_filename host_acknowledged host_custom_variable_names host_state host_comments_with_extra_info host_accept_passive_checks host_has_been_checked host_address host_staleness host_notifications_enabled host_active_checks_enabled host_perf_data host_custom_variable_values host_name host_check_command host_notes_url_expanded
 Filter: host_scheduled_downtime_depth = 0
@@ -40,8 +38,7 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
-#
+# services_stats
 GET services
 Stats: state >= 0
 Stats: state > 0
@@ -61,8 +58,7 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
-#
+# services_get
 GET services
 Columns: host_scheduled_downtime_depth service_last_check service_check_command service_icon_image service_notifications_enabled service_host_name service_perf_data service_action_url_expanded service_custom_variable_names service_comments_with_extra_info host_custom_variable_values host_filename service_scheduled_downtime_depth service_accept_passive_checks host_custom_variable_names service_has_been_checked service_notes_url_expanded service_downtimes service_modified_attributes_list service_custom_variable_values service_acknowledged service_plugin_output service_staleness service_last_state_change service_description host_address service_in_notification_period service_service_description service_active_checks_enabled service_pnpgraph_present host_check_command host_name service_is_flapping service_state host_has_been_checked host_state
 Filter: service_state = 0
@@ -88,8 +84,7 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
-#
+# logs_get
 GET log
 Columns: log_state_type log_plugin_output log_comment log_state log_lineno host_name service_description log_time log_type
 Filter: log_time >= 1458322984
@@ -101,32 +96,31 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
-#
+# host_downtime
 COMMAND [1458501825] SCHEDULE_HOST_DOWNTIME;local1;1458501825;1483225200;1;0;0;nagiosadmin;s
 
-#
+# service_downtime
 COMMAND [1458497087] SCHEDULE_SVC_DOWNTIME;local2;Service;1458497087;1483225200;1;0;0;nagiosadmin;dd
 
-#
+# host_ack
 COMMAND [1458501878] ACKNOWLEDGE_HOST_PROBLEM;local1;2;1;0;nagiosadmin;j;0
 
-#
+# service_ack
 COMMAND [1458497348] ACKNOWLEDGE_SVC_PROBLEM;local2;Service;2;1;0;nagiosadmin;ddd;0
 
-#
+# host_remove_ack
 COMMAND [1458682386] REMOVE_HOST_ACKNOWLEDGEMENT;local1;Service
 
-#
+# service_remove_ack
 COMMAND [1458682386] REMOVE_SVC_ACKNOWLEDGEMENT;local1;Service
 
-#
+# host_remove_downtime
 COMMAND [1458999214] DEL_HOST_DOWNTIME;1
 
-#
+# service_remove_downtime
 COMMAND [1458999214] DEL_SVC_DOWNTIME;2
 
-#
+# commands_get
 GET commands
 Columns: name
 ColumnHeaders: off
@@ -134,28 +128,28 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
+# hostgroups_get
 GET hostgroups
 Columns: name alias
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
+# contactgroups_get
 GET contactgroups
 Columns: name alias
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
+# servicegroups_get
 GET servicegroups
 Columns: name alias
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
-#RECV
+# downtimes_get
 GET downtimes
 Columns: downtime_id downtime_author downtime_start_time downtime_end_time downtime_entry_time downtime_fixed downtime_duration downtime_is_service downtime_comment service_description host_name service_has_been_checked service_state host_has_been_checked host_state
 Localtime: 1458985774
@@ -163,5 +157,3 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 Limit: 1001
-
-#RECV

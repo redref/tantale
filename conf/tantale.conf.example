@@ -52,8 +52,8 @@ sniff_on_start = True
 sniff_on_connection_fail = True
 
 # index options
-status_index = status
-log_index = status_logs
+status_index = test_status
+log_index = test_status_logs
 log_index_rotation = 'daily'
 request_timeout = 30
 

@@ -65,8 +65,6 @@ class Server(object):
         if setproctitle:
             setproctitle('tantale')
 
-        self.config = self.load_config(self.configfile)
-
         processes = []
         init_events = []
 

@@ -108,7 +108,7 @@ class SocketClient(object):
             totalsent = totalsent + sent
 
     def recv(self, size=4096):
-        return self.sock.recv(size)
+        return self.sock.recv(size).decode('utf-8')
 
     def close(self):
         self.sock.shutdown(socket.SHUT_RDWR)
@@ -151,7 +151,9 @@ class TantaleTC(unittest.TestCase):
         if self.daemon_p and self.daemon_p.is_alive():
             self.daemon_p.terminate()
             self.daemon_p.join()
-            self.daemon_p = None
+
+        self.ready = Event()
+        self.daemon_p = Process(target=self._launch)
 
     def _launch(self):
         """ Internally launch tantale daemon """
@@ -183,14 +185,15 @@ class TantaleTC(unittest.TestCase):
             return f.read()
 
     def getParsedFixture(self, path):
-        fixtures = []
+        fixtures = {}
         request = ""
         for line in self.getFixture(path).split('\n'):
             if line.startswith('#'):
+                name = line[2:]
                 continue
 
             if line == '' and request != "":
-                fixtures.append(request)
+                fixtures[name] = request
                 request = ""
             else:
                 request += "%s\n" % line

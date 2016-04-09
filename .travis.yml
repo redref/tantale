@@ -4,14 +4,15 @@ language: python
 python:
   - "3.4"
 
-# Necessary to setup elastic
-services:
-  - elasticsearch
-
 before_script:
-  - sleep 10
+  - bash setup_elasticsearch.sh
+  - sleep 5
 
-# All ens
+after_script:
+  - kill $(cat elasticsearch-*/pidfile)
+  - rm -rf elasticsearch-*
+
+# All envs
 env:
   - TOX_ENV=py27
   - TOX_ENV=py33

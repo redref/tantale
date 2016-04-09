@@ -47,3 +47,4 @@ coverage.xml
 #
 .mock_calls
 .test_*
+elasticsearch-*

@@ -13,7 +13,7 @@ Elasticsearch templates :
 
   * LOGS INDEX : in status_logs.template
 
-  * UPDATE SCRIPT (Groovy) :
+  * UPDATE SCRIPT (Groovy) - must be set manually (elasticsearch security) :
 
 Path may be /etc/elasticsearch/scripts/tantale.groovy
 
@@ -42,13 +42,17 @@ Timestamp returned in update query ()
 
 from __future__ import print_function
 
+import os
+import json
+import time
+from datetime import datetime
 import traceback
 from six import string_types
 
 from tantale.backend import BaseBackend
 from tantale.utils import str_to_bool
 
-from elasticsearch.client import Elasticsearch
+from elasticsearch.client import Elasticsearch, _normalize_hosts
 
 
 class ElasticsearchBaseBackend(BaseBackend):
@@ -155,6 +159,7 @@ class ElasticsearchBaseBackend(BaseBackend):
 
             # Connect to server
             try:
+                self.log.debug(_normalize_hosts(self.hosts))
                 self.elasticclient = Elasticsearch(
                     self.hosts,
                     use_ssl=self.use_ssl,
@@ -165,6 +170,32 @@ class ElasticsearchBaseBackend(BaseBackend):
                     sniff_on_connection_fail=self.sniff_on_connection_fail,
                 )
                 self.log.info("ElasticsearchBackend: connection established")
+
+                # Push templates (and drop indices if asked to)
+                if self.config.get('recreate_index_for_test', None):
+                    if self.elasticclient.indices.exists(self.status_index):
+                        self.elasticclient.indices.delete(self.status_index)
+                    index = self.get_log_index(int(time.time()))
+                    if self.elasticclient.indices.exists(index):
+                        self.elasticclient.indices.delete(index)
+
+                file = os.path.join(os.path.dirname(
+                    os.path.abspath(__file__)), 'status.template')
+                with open(file, 'r') as f:
+                    name = "tantale_%s" % self.status_index
+                    template = json.loads(f.read())
+                    template['template'] = self.status_index
+                    self.elasticclient.indices.put_template(
+                        name, body=json.dumps(template))
+
+                file = os.path.join(os.path.dirname(
+                    os.path.abspath(__file__)), 'status_logs.template')
+                with open(file, 'r') as f:
+                    name = "tantale_%s" % self.log_index
+                    template = json.loads(f.read())
+                    template['template'] = "%s-*" % self.log_index
+                    self.elasticclient.indices.put_template(
+                        name, body=json.dumps(template))
             except:
                 # Log Error
                 self._throttle_error("ElasticsearchBackend: connection failed")
@@ -180,3 +211,21 @@ class ElasticsearchBaseBackend(BaseBackend):
         Close / Free
         """
         self.elasticclient = None
+
+    def get_log_index(self, timestamp):
+        # Determine log index (with log timestamp)
+        if self.log_index_rotation == 'daily':
+            index = "%s-%s" % (
+                self.log_index,
+                datetime.fromtimestamp(
+                    timestamp).strftime('%Y.%m.%d')
+            )
+        elif self.log_index_rotation == 'hourly':
+            index = "%s-%s" % (
+                self.log_index,
+                datetime.fromtimestamp(
+                    timestamp).strftime('%Y.%m.%d.%H')
+            )
+        else:
+            index = self.log_index
+        return index
