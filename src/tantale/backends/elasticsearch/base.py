@@ -52,7 +52,7 @@ from six import string_types
 from tantale.backend import BaseBackend
 from tantale.utils import str_to_bool
 
-from elasticsearch.client import Elasticsearch, _normalize_hosts
+from elasticsearch.client import Elasticsearch
 
 
 class ElasticsearchBaseBackend(BaseBackend):
@@ -159,7 +159,6 @@ class ElasticsearchBaseBackend(BaseBackend):
 
             # Connect to server
             try:
-                self.log.debug(_normalize_hosts(self.hosts))
                 self.elasticclient = Elasticsearch(
                     self.hosts,
                     use_ssl=self.use_ssl,
@@ -173,11 +172,15 @@ class ElasticsearchBaseBackend(BaseBackend):
 
                 # Push templates (and drop indices if asked to)
                 if self.config.get('recreate_index_for_test', None):
-                    if self.elasticclient.indices.exists(self.status_index):
-                        self.elasticclient.indices.delete(self.status_index)
-                    index = self.get_log_index(int(time.time()))
-                    if self.elasticclient.indices.exists(index):
-                        self.elasticclient.indices.delete(index)
+                    try:
+                        index = self.status_index
+                        if self.elasticclient.indices.exists(index):
+                            self.elasticclient.indices.delete(index)
+                        index = self.get_log_index(int(time.time()))
+                        if self.elasticclient.indices.exists(index):
+                            self.elasticclient.indices.delete(index)
+                    except:
+                        pass
 
                 file = os.path.join(os.path.dirname(
                     os.path.abspath(__file__)), 'status.template')

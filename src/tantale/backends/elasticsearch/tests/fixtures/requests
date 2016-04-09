@@ -37,6 +37,21 @@ Localtime: 1458337384
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
+Limit: 2
+
+# hosts_get_user_2
+GET hosts
+Columns: host_scheduled_downtime_depth host_last_state_change host_pnpgraph_present host_icon_image host_plugin_output host_is_flapping host_in_notification_period host_action_url_expanded host_modified_attributes_list host_downtimes host_filename host_acknowledged host_custom_variable_names host_state host_comments_with_extra_info host_accept_passive_checks host_has_been_checked host_address host_staleness host_notifications_enabled host_active_checks_enabled host_perf_data host_custom_variable_values host_name host_check_command host_notes_url_expanded
+Filter: host_scheduled_downtime_depth = 0
+Filter: host_acknowledged = 0
+Filter: host_has_been_checked = 1
+Filter: host_custom_variable_names < _REALNAME
+Localtime: 1458337384
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+AuthUser: user_2
+Limit: 2
 
 # services_stats
 GET services
