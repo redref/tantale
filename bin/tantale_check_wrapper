@@ -1,10 +1,55 @@
-#!/usr/bin/env sh
+#!/usr/bin/env python
+# coding=utf-8
 
-fifo=/dev/shm/nagios_fifo
+from __future__ import print_function
 
-[ -p "${fifo}" ] || mkfifo "${fifo}"
+import os
+import sys
+import time
+import socket
+from subprocess import getstatusoutput
+from six import b as bytes
+import stat
 
-output="$($@)"
-status=$?
+if len(sys.argv) < 3:
+    print(
+        "You must specify at least 2 args.\n"
+        "  %s <service_name> <check_command>" % __file__,
+        file=sys.stderr)
+    sys.exit(1)
 
-echo "[$(date "+%s")] PROCESS_SERVICE_CHECK_RESULT;$(hostname -f);${1};${status};${output}" > ${fifo}
+fifo_path = "/dev/shm/nagios_fifo"
+
+if fifo_path and not os.path.exists(fifo_path):
+    print("%s not exists." % fifo_path, file=sys.stderr)
+    sys.exit(1)
+
+if not stat.S_ISFIFO(os.stat(fifo_path).st_mode):
+    print("%s not a fifo file." % fifo_path, file=sys.stderr)
+    sys.exit(1)
+
+try:
+    fifo = os.open(fifo_path, os.O_WRONLY | os.O_NONBLOCK)
+except:
+    print(
+        "%s fifo not suitable for write. Tantale Client may be down." %
+        fifo_path, file=sys.stderr)
+    sys.exit(1)
+
+service = sys.argv[1]
+command = sys.argv[2:]
+
+status, output = getstatusoutput(command[0])
+
+# Output must be one liner
+try:
+    output = output[:output.index("\n")]
+except:
+    pass
+
+os.write(
+    fifo,
+    bytes(
+        "[%d] PROCESS_SERVICE_CHECK_RESULT;%s;%s;%d;%s\n" %
+        (int(time.time()), socket.getfqdn(), service, status, output)))
+os.close(fifo)

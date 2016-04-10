@@ -4,9 +4,7 @@ from __future__ import print_function
 
 import re
 import time
-import json
 import random
-from six import b as bytes
 
 import configobj
 from test import TantaleTC

@@ -2,39 +2,59 @@
 
 from __future__ import print_function
 
+import re
 import os
-import socket
-import sys
+import time
 from six import b as bytes
 
-"""
-from test import ClientTestCase
-
-from tantale.client import Client
+import configobj
+from test import TantaleTC
 
 my_folder = os.path.dirname(os.path.abspath(__file__))
 diamond_fifo = os.path.join(my_folder, '.test_diamond_fifo')
 nagios_fifo = os.path.join(my_folder, '.test_nagios_fifo')
 
+diamond_input = """
+servers.azibox.diskspace.root.byte_percentfree 90.90 1460281153
+servers.azibox.diskspace.root.byte_used 11017080832.00 1460281153
+servers.azibox.diskspace.root.byte_free 109989548032.00 1460281153
+servers.azibox.diskspace.root.byte_avail 103819173888.00 1460281153
+servers.azibox.diskspace.root.inodes_percentfree 95 1460281153
+servers.azibox.diskspace.root.inodes_used 340616 1460281153
+servers.azibox.diskspace.root.inodes_free 7171448 1460281153
+servers.azibox.diskspace.root.inodes_avail 7171448 1460281153
+servers.azibox.cpu.total.system 1 1460281156
+servers.azibox.cpu.total.user 3 1460281156
+servers.azibox.cpu.total.softirq 0 1460281156
+servers.azibox.cpu.total.nice 0 1460281156
+servers.azibox.cpu.total.steal 0 1460281156
+servers.azibox.cpu.total.iowait 0 1460281156
+servers.azibox.cpu.total.guest 0 1460281156
+servers.azibox.cpu.total.guest_nice 0 1460281156
+servers.azibox.cpu.total.idle 396 1460281156
+servers.azibox.cpu.total.irq 0 1460281156
+"""
 
-def getfqdn():
-    return 'mock_fqdn'
 
-
-class ClientRealTestCase(ClientTestCase):
+class ClientTC(TantaleTC):
     def setUp(self):
-        # Mock this
-        socket.getfqdn = getfqdn
+        super(ClientTC, self).setUp()
 
         # Daemon config
-        self.config = {
+        config = {
             'modules': {
                 'Client': {
-                    'diamond': {'fifo_file': diamond_fifo},
-                    'nagios': {'fifo_file': nagios_fifo},
+                    'enabled': True,
+                    'diamond_fifo': diamond_fifo,
+                    'nagios_fifo': nagios_fifo,
                 }
-            }
+            },
+            'backends':
+                {'ElasticsearchBackend':
+                    {'batch': 1, 'recreate_index_for_test': True}}
         }
+        # Merge config addins
+        self.server.config.merge(configobj.ConfigObj(config))
 
         # Prepare fifos
         try:
@@ -49,59 +69,40 @@ class ClientRealTestCase(ClientTestCase):
             pass
         os.mkfifo(nagios_fifo)
 
-        # Prepare receiving sock
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.s.bind(('', 2003))
-        self.s.listen(1024)
-
-        super(ClientRealTestCase, self).setUp()
-
-        self.diamond_fd = os.open(diamond_fifo, os.O_WRONLY | os.O_NONBLOCK)
-        self.nagios_fd = os.open(nagios_fifo, os.O_WRONLY | os.O_NONBLOCK)
-
-    def tearDown(self):
-        self.s.close()
-        super(ClientRealTestCase, self).tearDown()
-
     def test_Diamond(self):
-        sock, addr = self.s.accept()
+        self.start()
+        diamond_fd = os.open(diamond_fifo, os.O_WRONLY | os.O_NONBLOCK)
 
-        metrics = [
-            'servers.test.diskspace.root.byte_percentfree 90 1459589281',
-            'servers.test.diskspace.root.byte_percentfree 50 1459589281',
-        ]
+        for metric in diamond_input.split("\n"):
+            os.write(diamond_fd, bytes("%s\n" % metric))
 
-        results = \
-            "1459589281 mock_fqdn fs_root 1 diskspace.root.byte_percentfree"\
-            " value upper than 90|user_1,user_2\n" \
-            "1459589281 mock_fqdn fs_root 0 diskspace.root.byte_percentfree"\
-            ": 50|user_1,user_2\n"
-
-        for metric in metrics:
-            os.write(self.diamond_fd, bytes("%s\n" % metric))
-
-        res = sock.recv(4096)
-
-        self.flush()
-        self.assertEqual(res, bytes(results))
+        # Check result from livestatus
+        live_s = self.getSocket('Livestatus')
+        request = \
+            "GET services\n" \
+            "Columns: host_scheduled_downtime_depth service_last_check " \
+            "service_check_command service_host_name service_plugin_output " \
+            "service_last_state_change service_description host_address " \
+            "service_service_description host_name service_state\n" \
+            "OutputFormat: python\n" \
+            "ResponseHeader: fixed16\n\n"
+        live_s.send(request)
+        res = live_s.recv()
+        res = eval(res[16:])
+        print(res)
+        self.stop()
 
     def test_Nagios(self):
-        sock, addr = self.s.accept()
+        self.start()
 
-        metrics = [
-            '[1459610979] PROCESS_SERVICE_CHECK_RESULT;mock_fqdn;echo;0;toto',
-            '[1459610979] PROCESS_SERVICE_CHECK_RESULT;mock_fqdn;echo;2;error',
-        ]
+        fd = os.open(nagios_fifo, os.O_WRONLY | os.O_NONBLOCK)
+        os.write(
+            fd,
+            bytes(
+                "[%d] PROCESS_SERVICE_CHECK_RESULT;%s;%s;%d;%s\n" %
+                (int(time.time()), "fqdn", "Host", 0, "test_output")))
+        os.close(fd)
 
-        results = \
-            "1459610979 mock_fqdn echo 0 |user_1,user_2\n" \
-            "1459610979 mock_fqdn echo 2 |user_1,user_2\n"
+        # TODO : test results
 
-        for metric in metrics:
-            os.write(self.nagios_fd, bytes("%s\n" % metric))
-
-        res = sock.recv(4096)
-        self.flush()
-        self.assertEqual(res, bytes(results))
-"""
+        self.stop()

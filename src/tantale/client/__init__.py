@@ -18,6 +18,11 @@ try:
 except ImportError:
     setproctitle = None
 
+try:
+    BlockingIOError
+except:
+    BlockingIOError = None
+
 
 class Client(object):
     """
@@ -41,28 +46,28 @@ class Client(object):
         self.host = self.config['server_host']
         self.port = int(self.config['server_port'])
         self.sock = None
+
+        # Contacts
         if self.config['contacts']:
             self.contacts = ','.join(self.config['contacts'])
         else:
             self.contacts = None
 
         # Diamond input config
-        self.diamond_fifo = self.config['diamond']['fifo_file']
-        self.diamond_fd = None
-        self.diamond_checks = self.config['diamond'].get('checks', None)
-        self.diamond_stack = ""
+        self.diamond_fifo = self.config['diamond_fifo']
+        self.create_fifo(self.diamond_fifo)
 
         # Nagios input config
-        self.nagios_fifo = self.config['nagios']['fifo_file']
-        self.nagios_fd = None
-        self.nagios_stack = ""
-        # Drop perfdata here
+        self.nagios_fifo = self.config['nagios_fifo']
+        self.create_fifo(self.nagios_fifo)
+
+        # Nagios regexp (drop perfdata)
         self.pattern = re.compile(
             r'\[(?P<timestamp>\d+)\] PROCESS_SERVICE_CHECK_RESULT;'
             '(?P<hostname>[^;]+);'
             '(?P<check>[^;]+);'
             '(?P<status>[^;]+);'
-            '(?P<output>.*?)(|\|.*$)'
+            '(?P<output>.*)(|\|.*$)'
         )
 
     def __del__(self):
@@ -81,6 +86,9 @@ class Client(object):
             os.write(pipe[1], bytes("END\n"))
         signal.signal(signal.SIGTERM, sig_handler)
 
+        diamond_fd = None
+        nagios_fd = None
+
         if init_done:
             init_done.set()
 
@@ -88,16 +96,16 @@ class Client(object):
 
         while self.running:
             # Open diamond
-            if self.diamond_fifo and not self.diamond_fd:
-                self.diamond_fd = self.open_fifo(self.diamond_fifo)
+            if self.diamond_fifo and not diamond_fd:
+                diamond_fd = self.open_fifo(self.diamond_fifo)
 
             # Open nagios
-            if self.nagios_fifo and not self.nagios_fd:
-                self.nagios_fd = self.open_fifo(self.nagios_fifo)
+            if self.nagios_fifo and not nagios_fd:
+                nagios_fd = self.open_fifo(self.nagios_fifo)
 
             # Wait IO
             fds = [pipe[0]]
-            for fd in (self.diamond_fd, self.nagios_fd):
+            for fd in (diamond_fd, nagios_fd):
                 if fd:
                     fds.append(fd)
 
@@ -110,29 +118,36 @@ class Client(object):
             # Process
             result = ""
             for fd in r:
-                if fd == self.diamond_fd:
+                if fd == diamond_fd:
                     try:
                         result += self.process_diamond(
-                            self.read_fifo(self.diamond_fd))
+                            self.read_fifo(diamond_fd))
                     except:
                         self.log.debug(
                             'Diamond error:\n%s' % traceback.format_exc())
                         self.diamond_fd = None
 
-                elif fd == self.nagios_fd:
+                elif fd == nagios_fd:
                     try:
-                        result += self.process_nagios(
-                            self.read_fifo(self.nagios_fd))
+                        res = self.read_fifo(nagios_fd)
+                        if res:
+                            result += self.process_nagios(res)
                     except:
                         self.log.debug(
                             'Nagios error:\n%s' % traceback.format_exc())
-                        self.nagios_fd = None
+                        self.nagios_fd = self.open_fifo(self.nagios_fifo)
 
             # Send
             if result != "":
                 self.send(result)
 
         self.log.info("Exit")
+
+    def create_fifo(self, fifo_path):
+        if fifo_path and not os.path.exists(fifo_path):
+            os.mkfifo(fifo_path, 0o0660)
+        elif not stat.S_ISFIFO(os.stat(fifo_path).st_mode):
+            raise Exception("%s not a fifo file")
 
     def open_fifo(self, fifo_path):
         try:
@@ -146,10 +161,16 @@ class Client(object):
     def read_fifo(self, fifo_fd):
         try:
             res = os.read(fifo_fd, 4096).decode('utf-8')
-            if res == '':
-                raise Exception('Reopen FIFO, lost transaction')
-            return res
-        except:
+            if res != "":
+                return res
+            else:
+                return False
+        except BlockingIOError:
+            pass
+        except Exception as exc:
+            # Python 2 BlockingIOError
+            if isinstance(exc, OSError) and exc.errno == 11:
+                return False
             self.log.debug('Trace: %s' % traceback.format_exc())
             os.close(fifo_fd)
             raise
@@ -238,4 +259,5 @@ class Client(object):
             else:
                 result += "\n"
 
+            print(result)
         return result

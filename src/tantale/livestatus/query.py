@@ -55,7 +55,7 @@ FIELDS_DUMMY = {
     "execution_time": 0,
     "custom_variables": {},
     "class": 1,
-    "state_type": 1,
+    "state_type": '',
     "downtime_start_time": 0,
     "downtime_end_time": 0,
     "downtime_entry_time": 0,

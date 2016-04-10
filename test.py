@@ -118,7 +118,6 @@ class SocketClient(object):
 class TantaleTC(unittest.TestCase):
     bench = False
     config_file = 'conf/tantale.conf.example'
-    client_config = 'conf/tantale.client.conf.example'
 
     def setUp(self):
         from tantale.server import Server

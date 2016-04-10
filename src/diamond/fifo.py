@@ -5,6 +5,8 @@ Tantale diamond handler
 Pass metrics to FIFO file
 """
 
+from __future__ import print_function
+
 from diamond.handler.Handler import Handler
 
 import stat
