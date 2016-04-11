@@ -70,12 +70,18 @@ class Client(object):
             '(?P<output>.*)(|\|.*$)'
         )
 
+        # Pre-provide checks
+        self.checks = {"diamond": []}
+        self.metric_stash = {}
+
     def __del__(self):
         self.close()
 
     def run(self, init_done=None):
         if setproctitle:
             setproctitle('%s - Client' % getproctitle())
+
+        self.parse_config_checks()
 
         # Gentle out
         pipe = os.pipe()
@@ -201,44 +207,79 @@ class Client(object):
     def process_diamond(self, lines):
         result = ""
         for line in lines.strip().split('\n'):
-            line_list = line.split(' ')
+            llist = line.split(' ')
+            value = float(llist[1])
+            ts = llist[2]
 
-            for check in self.diamond_checks:
-                if line_list[0].endswith(check):
-                    thresholds = self.diamond_checks[check]
+            for check in self.checks['diamond']:
+                # Parse metric and enqueue value
+                if check['metric_prefix'] and llist[0].startswith(
+                    check['metric_prefix']
+                ):
+                    name = llist[0][len(check['metric_prefix']) + 1:]
+                else:
+                    name = llist[0]
+
+                if name in check['metrics']:
+                    self.metric_stash[name] = value
+                else:
+                    continue
+
+                # Compute a value on this check
+                vals = []
+                for metric in check['metrics']:
+                    if metric in self.metric_stash:
+                        vals.append(self.metric_stash[metric])
+                    else:
+                        self.log.warn(
+                            "Check '%s': missing metric %s" %
+                            (check['name'], metric))
+                        vals = None
+                        continue
+
+                if vals:
+                    try:
+                        computed = eval(check['formula'].format(*vals))
+                        computed = float(computed)
+                    except:
+                        self.log.debug(traceback.format_exc())
+
                     status, output = self.range_check(
-                        check,
-                        thresholds.get('lower_critical', None),
-                        thresholds.get('lower_warning', None),
-                        thresholds.get('upper_warning', None),
-                        thresholds.get('upper_critical', None),
-                        line_list[1],
-                    )
+                        value, **check['thresholds'])
 
                     result += "%s %s %s %s %s" % (
-                        line_list[2], self.my_hostname,
-                        thresholds.get('name', check), status, output)
+                        ts, check['hostname'], check['name'], status, output)
 
                     if self.contacts:
                         result += "|%s\n" % self.contacts
                     else:
                         result += "\n"
 
+        self.log.debug("Sending: %s" % result)
         return result
 
-    def range_check(self, metric, lc, lw, uw, uc, value):
-        """ Do the comparing maths """
-        message = "%s value %%s than %s" % (metric, value)
-        if lc and float(value) < float(lc):
-            return 2, message % 'lower'
-        elif lw and float(value) < float(lw):
-            return 1, message % 'lower'
-        elif uw and float(value) > float(uw):
-            return 1, message % 'upper'
-        elif uc and float(value) > float(uc):
-            return 2, message % 'upper'
+    def range_check(
+        self, value,
+        lower_crit=None, lower_warn=None, upper_warn=None, upper_crit=None
+    ):
+        """ Compare with thresholds """
+        message = "Value %f %%s than %%f" % value
+
+        if lower_crit and float(value) < float(lower_crit):
+            return 2, message % ('lower', lower_crit)
+
+        elif lower_warn and float(value) < float(lower_warn):
+            return 1, message % ('lower', lower_warn)
+
+        elif upper_warn and float(value) > float(upper_warn):
+            return 1, message % ('upper', upper_warn)
+
+        elif upper_crit and float(value) > float(upper_crit):
+            return 2, message % ('upper', upper_crit)
+
         else:
-            return 0, "%s: %s" % (metric, value)
+            return 0, "Value %f (%s, %s, %s, %s)" % \
+                (value, lower_crit, lower_warn, upper_warn, upper_crit)
 
     def process_nagios(self, lines):
         result = ""
@@ -259,5 +300,54 @@ class Client(object):
             else:
                 result += "\n"
 
-            print(result)
         return result
+
+    def parse_config_checks(self):
+        for key in self.config:
+            if isinstance(self.config[key], dict):
+                check = self.config[key]
+                check_type = check.get('type', None)
+
+                if check_type == "diamond":
+
+                    # WORK ON THRESHOLDS
+                    thresholds = check.get('thresholds', None)
+                    if not thresholds:
+                        self.log.info(
+                            "Dropping check '%s', no thresholds defined" % key)
+
+                    if len(thresholds) != 4:
+                        self.log.info(
+                            "Dropping check '%s', thresholds must contain"
+                            " 4 elements (lc, lw, uw, uc)" % key)
+
+                    explicit_thresholds = {}
+                    for idx, name in enumerate(
+                        ['lower_crit', 'lower_warn',
+                         'upper_warn', 'upper_crit']
+                    ):
+                        try:
+                            explicit_thresholds[name] = float(thresholds[idx])
+                        except ValueError:
+                            explicit_thresholds[name] = None
+
+                    # WORK ON EXPRESSION
+                    expression = check.get('expression', None)
+                    if not expression:
+                        self.log.info(
+                            "Dropping check '%s', no expression defined" % key)
+
+                    metrics = re.findall(r'\{([^\}]+)\}', expression)
+                    formula = re.sub(r'\{[^\}]+\}', '{}', expression)
+
+                    self.checks[check_type].append({
+                        "name": key,
+                        "hostname": check.get('hostname', socket.getfqdn()),
+                        "metric_prefix": check.get('metric_prefix', ''),
+                        "thresholds": explicit_thresholds,
+                        "metrics": metrics,
+                        "formula": formula,
+                    })
+
+                    self.log.info(
+                        "Found check %s" % self.checks[check_type][-1])

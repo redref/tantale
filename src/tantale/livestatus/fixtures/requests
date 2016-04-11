@@ -6,6 +6,23 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
+# get_service
+GET services
+Columns: host_scheduled_downtime_depth service_last_check service_check_command service_host_name service_plugin_output service_last_state_change service_description host_address service_service_description host_name service_state
+Filter: host_name = %s
+Filter: service_description = %s
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
+# get_host
+GET hosts
+Columns: host_scheduled_downtime_depth host_last_state_change host_pnpgraph_present host_icon_image host_plugin_output host_is_flapping host_in_notification_period host_action_url_expanded host_modified_attributes_list host_downtimes host_filename host_acknowledged host_custom_variable_names host_state host_comments_with_extra_info host_accept_passive_checks host_has_been_checked host_address host_staleness host_notifications_enabled host_active_checks_enabled host_perf_data host_custom_variable_values host_name host_check_command host_notes_url_expanded
+Filter: host_name = %s
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
 # hosts_stats
 GET hosts
 Stats: state >= 0

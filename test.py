@@ -165,39 +165,27 @@ class TantaleTC(unittest.TestCase):
         port = self.server.config['modules'][module]['port']
         return SocketClient(('127.0.0.1', int(port)))
 
-    def getFixtureDirPath(self):
-        path = os.path.join(
-            os.path.dirname(inspect.getfile(self.__class__)),
-            'fixtures')
-        return path
+    def getLivestatusRequest(self, request_name):
+        my_dir = os.path.dirname(os.path.abspath(__file__))
+        fix_file = os.path.join(
+            my_dir, 'src', 'tantale', 'livestatus', 'fixtures', 'requests')
 
-    def getFixturePath(self, fixture_name):
-        path = os.path.join(self.getFixtureDirPath(),
-                            fixture_name)
-        if not os.access(path, os.R_OK):
-            print("Missing Fixture " + path)
-        return path
-
-    def getFixture(self, path):
-        filepath = self.getFixturePath(path)
-        with open(filepath, 'r') as f:
-            return f.read()
-
-    def getParsedFixture(self, path):
-        fixtures = {}
         request = ""
-        for line in self.getFixture(path).split('\n'):
-            if line.startswith('#'):
-                name = line[2:]
-                continue
+        with open(fix_file, 'r') as f:
+            for line in f.read().split("\n"):
+                if line.startswith('#'):
+                    name = line[2:]
+                    continue
 
-            if line == '' and request != "":
-                fixtures[name] = request
-                request = ""
-            else:
-                request += "%s\n" % line
+                if line == '' and request != "":
+                    if name == request_name:
+                        return request
+                    else:
+                        request = ""
+                else:
+                    request += "%s\n" % line
+        return False
 
-        return fixtures
 
 ###############################################################################
 if __name__ == "__main__":

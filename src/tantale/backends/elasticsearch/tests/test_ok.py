@@ -46,10 +46,9 @@ class ElasticsearchTC(TantaleTC):
     def test_Status(self):
         self.start()
         live_s = self.getSocket('Livestatus')
-        requests = self.getParsedFixture('requests')
 
         # Status table
-        live_s.send("%s\n" % requests.get('status'))
+        live_s.send("%s\n" % self.getLivestatusRequest('status'))
         res = live_s.recv()
         self.assertEqual(
             res, "200          32 [['tantale', '1.0', 0, '', '']]\n")
@@ -82,7 +81,6 @@ class ElasticsearchTC(TantaleTC):
         self.push_checks(hosts_nb, services_per_host)
 
         live_s = self.getSocket('Livestatus')
-        requests = self.getParsedFixture('requests')
 
         # Hosts stats (wait every input done)
         regexp = r'200\s+\d+ \[\[' + str(hosts_nb) + ', \d+, \d+\]\]\n'
@@ -92,7 +90,7 @@ class ElasticsearchTC(TantaleTC):
             tries += 1
             if tries > 10:
                 break
-            live_s.send("%s\n" % requests.get('hosts_stats'))
+            live_s.send("%s\n" % self.getLivestatusRequest('hosts_stats'))
             res = live_s.recv()
             if re.search(regexp, res):
                 break
@@ -107,19 +105,19 @@ class ElasticsearchTC(TantaleTC):
                 ((hosts_nb * (services_per_host + 1)), (stop - start)))
 
         # Check limit enforced on hosts
-        live_s.send("%s\n" % requests.get('hosts_get'))
+        live_s.send("%s\n" % self.getLivestatusRequest('hosts_get'))
         res = live_s.recv()
         res = eval(res[16:])
         self.assertEqual(len(res), 2, "Check limit failed")
 
         # Check user fitler against hosts
-        live_s.send("%s\n" % requests.get('hosts_get_user_2'))
+        live_s.send("%s\n" % self.getLivestatusRequest('hosts_get_user_2'))
         res = live_s.recv()
         res = eval(res[16:])
         self.assertEqual(len(res), 1, "Auth User filter failed")
 
         # Get logs
-        live_s.send("%s\n" % requests.get('hosts_get'))
+        live_s.send("%s\n" % self.getLivestatusRequest('hosts_get'))
         res = live_s.recv()
 
         self.stop()

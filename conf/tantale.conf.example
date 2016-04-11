@@ -52,17 +52,20 @@ diamond_fifo = /dev/shm/diamond_to_fifo
 nagios_fifo = /dev/shm/nagios_fifo
 
 # Checks definition
+# Checks definition
 [[[root]]]
 type = diamond
-metric_prefix = servers.custom_fqdn
+metric_prefix = servers.my_fqdn
+hostname = fqdn
+thresholds = 10,20,"",""
+expression = {diskspace.root.byte_free} / {diskspace.root.byte_avail} * 100
+
+[[[Host]]]
+type = diamond
+metric_prefix = servers.my_fqdn
 hostname = fqdn
 thresholds = 10,20,20,80
-expression = diskspace.root.byte_percentfree
-
-[[[my_name]]]
-type = diamond
-thresholds = 10,20,70,80
-expression = diskspace.root.byte_percentfree
+expression = {diskspace.root.byte_percentfree}
 
 ################################################################################
 ### Options for backends

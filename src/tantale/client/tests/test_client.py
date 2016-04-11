@@ -14,26 +14,24 @@ my_folder = os.path.dirname(os.path.abspath(__file__))
 diamond_fifo = os.path.join(my_folder, '.test_diamond_fifo')
 nagios_fifo = os.path.join(my_folder, '.test_nagios_fifo')
 
-diamond_input = """
-servers.azibox.diskspace.root.byte_percentfree 90.90 1460281153
-servers.azibox.diskspace.root.byte_used 11017080832.00 1460281153
-servers.azibox.diskspace.root.byte_free 109989548032.00 1460281153
-servers.azibox.diskspace.root.byte_avail 103819173888.00 1460281153
-servers.azibox.diskspace.root.inodes_percentfree 95 1460281153
-servers.azibox.diskspace.root.inodes_used 340616 1460281153
-servers.azibox.diskspace.root.inodes_free 7171448 1460281153
-servers.azibox.diskspace.root.inodes_avail 7171448 1460281153
-servers.azibox.cpu.total.system 1 1460281156
-servers.azibox.cpu.total.user 3 1460281156
-servers.azibox.cpu.total.softirq 0 1460281156
-servers.azibox.cpu.total.nice 0 1460281156
-servers.azibox.cpu.total.steal 0 1460281156
-servers.azibox.cpu.total.iowait 0 1460281156
-servers.azibox.cpu.total.guest 0 1460281156
-servers.azibox.cpu.total.guest_nice 0 1460281156
-servers.azibox.cpu.total.idle 396 1460281156
-servers.azibox.cpu.total.irq 0 1460281156
-"""
+diamond_input = """servers.my_fqdn.diskspace.root.byte_percentfree 90.90
+servers.my_fqdn.diskspace.root.byte_used 11017080832.00
+servers.my_fqdn.diskspace.root.byte_free 109989548032.00
+servers.my_fqdn.diskspace.root.byte_avail 103819173888.00
+servers.my_fqdn.diskspace.root.inodes_percentfree 95
+servers.my_fqdn.diskspace.root.inodes_used 340616
+servers.my_fqdn.diskspace.root.inodes_free 7171448
+servers.my_fqdn.diskspace.root.inodes_avail 7171448
+servers.my_fqdn.cpu.total.system 1
+servers.my_fqdn.cpu.total.user 3
+servers.my_fqdn.cpu.total.softirq 0
+servers.my_fqdn.cpu.total.nice 0
+servers.my_fqdn.cpu.total.steal 0
+servers.my_fqdn.cpu.total.iowait 0
+servers.my_fqdn.cpu.total.guest 0
+servers.my_fqdn.cpu.total.guest_nice 0
+servers.my_fqdn.cpu.total.idle 396
+servers.my_fqdn.cpu.total.irq 0"""
 
 
 class ClientTC(TantaleTC):
@@ -74,22 +72,22 @@ class ClientTC(TantaleTC):
         diamond_fd = os.open(diamond_fifo, os.O_WRONLY | os.O_NONBLOCK)
 
         for metric in diamond_input.split("\n"):
-            os.write(diamond_fd, bytes("%s\n" % metric))
+            os.write(diamond_fd, bytes("%s %d\n" % (metric, int(time.time()))))
 
         # Check result from livestatus
         live_s = self.getSocket('Livestatus')
-        request = \
-            "GET services\n" \
-            "Columns: host_scheduled_downtime_depth service_last_check " \
-            "service_check_command service_host_name service_plugin_output " \
-            "service_last_state_change service_description host_address " \
-            "service_service_description host_name service_state\n" \
-            "OutputFormat: python\n" \
-            "ResponseHeader: fixed16\n\n"
-        live_s.send(request)
-        res = live_s.recv()
-        res = eval(res[16:])
-        print(res)
+        for nb in range(10):
+            time.sleep(1)
+            live_s.send(
+                self.getLivestatusRequest('get_service') % ("fqdn", "root"))
+            res = live_s.recv()
+            res = eval(res[16:])
+            if len(res) > 0:
+                break
+
+        self.assertEqual(
+            res[0][-3], "Value 103819173888.000000 (10.0, 20.0, None, None)")
+
         self.stop()
 
     def test_Nagios(self):
@@ -103,6 +101,18 @@ class ClientTC(TantaleTC):
                 (int(time.time()), "fqdn", "Host", 0, "test_output")))
         os.close(fd)
 
-        # TODO : test results
+        # Check result from livestatus
+        live_s = self.getSocket('Livestatus')
+        for nb in range(10):
+            time.sleep(1)
+            live_s.send(self.getLivestatusRequest('get_host') % ("fqdn"))
+            res = live_s.recv()
+            res = eval(res[16:])
+            if len(res) > 0:
+                break
+
+        self.assertEqual(res[0][-3], "fqdn")
+        self.assertEqual(res[0][4], "test_output")
+        self.assertEqual(res[0][13], 0)
 
         self.stop()
