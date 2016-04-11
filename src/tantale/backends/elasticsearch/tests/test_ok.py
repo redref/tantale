@@ -108,7 +108,7 @@ class ElasticsearchTC(TantaleTC):
         live_s.send("%s\n" % self.getLivestatusRequest('hosts_get'))
         res = live_s.recv()
         res = eval(res[16:])
-        self.assertEqual(len(res), 2, "Check limit failed")
+        self.assertEqual(len(res), 1, "Check limit failed")
 
         # Check user fitler against hosts
         live_s.send("%s\n" % self.getLivestatusRequest('hosts_get_user_2'))

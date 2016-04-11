@@ -182,9 +182,12 @@ class Client(object):
             raise
 
     def connect(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setblocking(True)
-        self.sock.connect((self.host, self.port))
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.setblocking(True)
+            self.sock.connect((self.host, self.port))
+        except:
+            self.sock = None
 
     def close(self):
         if self.sock:
@@ -255,7 +258,8 @@ class Client(object):
                     else:
                         result += "\n"
 
-        self.log.debug("Sending: %s" % result)
+        if result != "":
+            self.log.debug("Sending: %s" % result.strip())
         return result
 
     def range_check(

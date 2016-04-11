@@ -54,7 +54,7 @@ Localtime: 1458337384
 OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
-Limit: 2
+Limit: 1
 
 # hosts_get_user_2
 GET hosts
