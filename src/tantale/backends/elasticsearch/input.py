@@ -58,17 +58,20 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             })
 
             while True:
-                # Refresh (before redo request)
-                self.elasticclient.indices.refresh(index=self.status_index)
+                try:
+                    # Refresh (before redo request)
+                    self.elasticclient.indices.refresh(index=self.status_index)
 
-                # GET
-                result = self.elasticclient.search(
-                    index=self.status_index, body=search_body)
+                    # GET
+                    result = self.elasticclient.search(
+                        index=self.status_index, body=search_body)
 
-                if 'hits' not in result:
+                    if 'hits' not in result:
+                        raise Exception("No hits")
+                except Exception as e:
                     self.log.debug(
                         "ElasticsearchBackend: failed to get outdated"
-                        "\n%s" % result)
+                        "\n%s" % e)
                     break
 
                 if result['hits']['total'] == 0:
