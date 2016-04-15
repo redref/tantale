@@ -97,18 +97,23 @@ backlog_size = 50 # keep X checks into memory when backend failing (before trim)
 # http://docs.python.org/library/logging.config.html#configuration-file-format
 
 [loggers]
-keys = root
+keys = root,tantale
 
 [handlers]
-keys = rotated_file
+keys = null,rotated_file
 
 [formatters]
 keys = default
 
 [logger_root]
 level = INFO
-handlers = rotated_file
+handlers = null
 propagate = 1
+
+[logger_tantale]
+level = INFO
+handlers = rotated_file
+qualname = tantale
 
 [handler_rotated_file]
 class = handlers.TimedRotatingFileHandler
@@ -117,6 +122,12 @@ formatter = default
 # rotate at midnight, each day and keep 7 days
 args = ('/var/log/tantale/tantale.log', 'midnight', 1, 7)
 
+[handler_null]
+class = logging.NullHandler
+level = DEBUG
+formatter = default
+args = ()
+
 [formatter_default]
-format = [%(asctime)s] [%(threadName)s] %(message)s
+format = [%(asctime)s] %(levelname)8s [%(processName)s] %(message)s
 datefmt =

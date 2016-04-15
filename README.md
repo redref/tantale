@@ -31,6 +31,15 @@ Input format:
 <timestamp_s> <hostname> <check_name> <status> <plugin_output>|<comma_separated_contacts>
 ```
 
+### Performance
+
+On a single node (dev node), with basic configuration. Mainly IO bound.
+
+```
+Update 8000 checks to outdated in 7.094238 seconds.
+Created 8000 checks in 7.103210 seconds.
+```
+
 ### Client
 
 Collect diamond metrics on hosts (with bundled diamond handler) and/or nagios checks from FIFO then forward them to Input.

@@ -3,9 +3,9 @@
 
 import sys
 import os
-from glob import glob
-import platform
-from setuptools import setup
+
+from setuptools import setup, find_packages
+from setuptools.command.install import install
 
 
 def running_under_virtualenv():
@@ -29,14 +29,19 @@ def get_version():
 
 setup_kwargs = dict(zip_safe=0)
 
-distro = platform.dist()[0]
-distro_major_version = platform.dist()[1].split('.')[0]
-
 data_files = []
 if not running_under_virtualenv():
     data_files = [
-        ('/usr/share/diamond/handlers', ['src/diamond/fifo.py']),
+        ('/etc/tantale', ['conf/tantale.conf.example']),
     ]
+    if os.path.isdir('/usr/lib/systemd'):
+        # Systemd script
+        data_files.append((
+            '/usr/lib/systemd/system', ['service/systemd/tantale.service']))
+    else:
+        # Init script
+        data_files.append((
+            '/etc/init.d', ['service/init/tantale']))
 
 install_requires = ['configobj', ]
 
@@ -47,11 +52,23 @@ setup(
     author='redref',
     author_email='https://github.com/redref/tantale',
     license='Apache 2.0',
-    description='Monitoring API / Backend interfaces',
+    description='Monitoring system over NoSQL (mainly Elasticsearch)',
     package_dir={'': 'src'},
-    packages=['tantale', ],
+    packages=find_packages('src', exclude=["tests"]),
+    package_data={'': ['*.*']},
     scripts=['bin/tantale'],
     data_files=data_files,
     install_requires=install_requires,
+    classifiers=[
+        "Development Status :: 3 - Alpha",
+        "Environment :: Console",
+        "Intended Audience :: System Administrators",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: POSIX :: Linux",
+        "Programming Language :: Python :: 2.6",
+        "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
+        "Topic :: System :: Monitoring",
+    ],
     ** setup_kwargs
 )

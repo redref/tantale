@@ -57,7 +57,7 @@ class FifoHandler(Handler):
 
         config.update({
             'fifo_path': '/dev/shm/diamond_to_fifo',
-            'creation_mode': 0600,
+            'creation_mode': '0600',
         })
 
         return config

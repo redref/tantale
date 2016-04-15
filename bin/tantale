@@ -66,18 +66,18 @@ def main():
         parser.add_option("-u", "--user",
                           dest="user",
                           default=None,
-                          help="Change to specified unprivilegd user")
+                          help="Change to specified unprivileged user")
 
         parser.add_option("-g", "--group",
                           dest="group",
                           default=None,
-                          help="Change to specified unprivilegd group")
+                          help="Change to specified unprivileged group")
 
         parser.add_option("--skip-change-user",
                           dest="skip_change_user",
                           default=False,
                           action="store_true",
-                          help="Skip changing to an unprivilegd user")
+                          help="Skip changing to an unprivileged user")
 
         parser.add_option("--skip-fork",
                           dest="skip_fork",
@@ -100,7 +100,6 @@ def main():
         if options.foreground:
             options.skip_pidfile = True
             options.skip_fork = True
-            options.log_stdout = True
 
         # Initialize Config
         options.configfile = os.path.abspath(options.configfile)

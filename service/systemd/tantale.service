@@ -1,0 +1,9 @@
+[Unit]
+Description=tantale - Monitoring daemon
+
+[Service]
+ExecStart=/usr/bin/python /usr/local/bin/tantale --foreground
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target

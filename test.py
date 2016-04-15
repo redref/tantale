@@ -229,6 +229,8 @@ if __name__ == "__main__":
 
     # Disable normal logging
     from tantale.utils import DebugFormatter
+    root = logging.getLogger()
+    root.addHandler(logging.NullHandler())
     log = logging.getLogger("tantale")
     handler = logging.StreamHandler(sys.stderr)
     log.addHandler(handler)

@@ -1,3 +1,0 @@
-{"index": "test_status"}
-{"filter": {"and": [{"term": {"downtime": 1}}]}, "size": 1001}
-
