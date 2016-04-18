@@ -2,7 +2,7 @@
 Description=tantale - Monitoring daemon
 
 [Service]
-ExecStart=/usr/bin/python /usr/local/bin/tantale --foreground
+ExecStart={{{SCRIPT_PATH}}}/tantale --foreground
 Restart=on-abort
 
 [Install]

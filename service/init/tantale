@@ -18,7 +18,7 @@
 ### END INIT INFO
 
 NAME=tantale
-DAEMON=tantale
+DAEMON={{{SCRIPT_PATH}}}/tantale
 PIDFILE=/var/run/tantale.pid
 SCRIPTNAME=/etc/init.d/tantale
 LOCKDIR=/var/lock/subsys

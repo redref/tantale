@@ -69,6 +69,7 @@ class ClientTC(TantaleTC):
 
     def test_Diamond(self):
         self.start()
+
         diamond_fd = os.open(diamond_fifo, os.O_WRONLY | os.O_NONBLOCK)
 
         for metric in diamond_input.split("\n"):

@@ -7,7 +7,12 @@ import os
 from setuptools import setup, find_packages
 from setuptools.command.install import install
 
+my_dir = os.path.dirname(os.path.abspath(__file__))
 
+
+#
+# TOOLS
+#
 def running_under_virtualenv():
     if hasattr(sys, 'real_prefix'):
         return True
@@ -20,15 +25,18 @@ def running_under_virtualenv():
 
 def get_version():
     """
-        Get version from version.py
+    Get version from version.py
     """
-    sys.path.append(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
+    sys.path.append(os.path.join(my_dir, 'src'))
     from tantale import VERSION
     return VERSION
 
+#
+# Setup options
+#
 setup_kwargs = dict(zip_safe=0)
 
+init_file = None
 data_files = []
 if not running_under_virtualenv():
     data_files = [
@@ -38,12 +46,30 @@ if not running_under_virtualenv():
         # Systemd script
         data_files.append((
             '/usr/lib/systemd/system', ['service/systemd/tantale.service']))
+        init_file = os.path.join(my_dir, 'service/systemd/tantale.service')
     else:
         # Init script
         data_files.append((
             '/etc/init.d', ['service/init/tantale']))
+        init_file = os.path.join(my_dir, 'service/init/tantale')
 
-install_requires = ['configobj', ]
+requirements = os.path.join(my_dir, 'requirements.txt')
+with open(requirements, 'r') as f:
+    install_requires = f.read().split('\n')
+
+
+class TantaleInstallClass(install):
+    def run(self):
+        if init_file:
+            # Rewrite tantale path with distrib path
+            with open(init_file, 'r') as f:
+                content = f.read()
+            content = content.replace(
+                '{{{SCRIPT_PATH}}}', self.install_scripts)
+            with open(init_file, 'w') as f:
+                f.write(content)
+
+        install.run(self)
 
 setup(
     name='tantale',
@@ -56,7 +82,7 @@ setup(
     package_dir={'': 'src'},
     packages=find_packages('src', exclude=["tests"]),
     package_data={'': ['*.*']},
-    scripts=['bin/tantale'],
+    scripts=['bin/tantale', 'bin/tantale_check_wrapper'],
     data_files=data_files,
     install_requires=install_requires,
     classifiers=[
@@ -70,5 +96,6 @@ setup(
         "Programming Language :: Python :: 3",
         "Topic :: System :: Monitoring",
     ],
+    cmdclass={"install": TantaleInstallClass},
     ** setup_kwargs
 )

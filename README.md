@@ -31,7 +31,7 @@ Input format:
 <timestamp_s> <hostname> <check_name> <status> <plugin_output>|<comma_separated_contacts>
 ```
 
-### Performance
+#### Performance
 
 On a single node (dev node), with basic configuration. Mainly IO bound.
 

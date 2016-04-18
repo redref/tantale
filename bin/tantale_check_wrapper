@@ -7,7 +7,7 @@ import os
 import sys
 import time
 import socket
-from subprocess import getstatusoutput
+from subprocess import check_output, CalledProcessError, STDOUT
 from six import b as bytes
 import stat
 
@@ -37,9 +37,15 @@ except:
     sys.exit(1)
 
 service = sys.argv[1]
-command = sys.argv[2:]
+command = ' '.join(sys.argv[2:])
 
-status, output = getstatusoutput(command[0])
+try:
+    output = check_output(
+        command, stdin=None, stderr=STDOUT, shell=True).decode('utf-8')
+    status = 0
+except CalledProcessError as e:
+    output = e.output.decode('utf-8')
+    status = e.returncode
 
 # Output must be one liner
 try:
