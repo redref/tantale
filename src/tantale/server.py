@@ -8,7 +8,8 @@ import traceback
 import logging
 
 import configobj
-from multiprocessing import Manager, Process, Queue, active_children
+from multiprocessing import Process, Event, active_children
+from multiprocessing import JoinableQueue as Queue
 
 from tantale import config_min
 from tantale.utils import str_to_bool
@@ -48,7 +49,7 @@ class Server(object):
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
         # Start
-        process.daemon = False
+        process.daemon = True
         process.start()
 
         # Restore signals
@@ -56,11 +57,6 @@ class Server(object):
         signal.signal(signal.SIGTERM, l_SIGTERM_default_handler)
 
     def run(self, _onInitDone):
-        # Fix Manager title
-        if setproctitle:
-            setproctitle('tantale - Manager')
-        l_manager = Manager()
-
         # Set proctitle of main thread
         if setproctitle:
             setproctitle('tantale')
@@ -70,8 +66,7 @@ class Server(object):
 
         # Set the signal handlers
         def sig_handler(signum, frame):
-            for child in processes:
-                child.terminate()
+            self.log.debug("%s received" % signum)
         signal.signal(signal.SIGINT, sig_handler)
         signal.signal(signal.SIGTERM, sig_handler)
 
@@ -87,19 +82,19 @@ class Server(object):
                     # Input check Queue
                     queue_size = int(self.config['modules']['Input'].get(
                         'queue_size', 16384))
-                    check_queue = l_manager.Queue(maxsize=queue_size)
+                    check_queue = Queue(maxsize=queue_size)
                     self.log.debug('input_queue_size: %d', queue_size)
 
                     # Backends
                     processes.append(Process(
-                        name="Input Backend",
+                        name="Input_Backend",
                         target=inputserver.input_backend,
                         args=(check_queue,),
                     ))
                     self.spawn(processes[-1])
 
                     # Socket Listener
-                    init_events.append(l_manager.Event())
+                    init_events.append(Event())
                     processes.append(Process(
                         name="Input",
                         target=inputserver.run,
@@ -110,7 +105,7 @@ class Server(object):
                     # Freshness check
                     if modules[module]['freshness_timeout']:
                         processes.append(Process(
-                            name="Input Freshness",
+                            name="Input_Freshness",
                             target=inputserver.input_freshness,
                             args=(),
                         ))
@@ -122,7 +117,7 @@ class Server(object):
                     livestatusserver = LivestatusServer(self.config)
 
                     # Livestatus
-                    init_events.append(l_manager.Event())
+                    init_events.append(Event())
                     processes.append(Process(
                         name="Livestatus",
                         target=livestatusserver.run,
@@ -132,11 +127,11 @@ class Server(object):
 
             elif module == 'Client':
                 if str_to_bool(modules[module]['enabled']):
-                    from tantale.client import Client
+                    from tantale.client.server import Client
                     client = Client(self.config)
 
                     # Livestatus
-                    init_events.append(l_manager.Event())
+                    init_events.append(Event())
                     processes.append(Process(
                         name="Client",
                         target=client.run,
@@ -151,16 +146,19 @@ class Server(object):
         if len(processes) == 0:
             self.log.critical('No modules enabled. Quitting')
 
-        # We are ready
+        # Check our sub-processes are ready
         for event in init_events:
-            event.wait()
+            self.log.info('INIT DONE')
+            event.wait(15)
         _onInitDone()
 
-        # Wait
-        for process in processes:
-            process.join()
+        signal.pause()
 
-        self.log.info('Shutdown manager')
-        l_manager.shutdown()
+        for child in processes:
+            self.log.debug('Terminate %s process' % child.name)
+            child.terminate()
+
+        for child in processes:
+            child.join()
 
         self.log.info('Exit')

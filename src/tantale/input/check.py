@@ -26,8 +26,8 @@ class Check(object):
     pattern = re.compile(
         r'^'
         '(?P<timestamp>[0-9]+)\s+'
-        '(?P<hostname>\w+)\s+'
-        '(?P<check>\w+)\s+'
+        '(?P<hostname>[^\s]+)\s+'
+        '(?P<check>[^\s]+)\s+'
         '(?P<status>[0-3])\s+'
         '(?P<output>.*?)'
         '(|\|(?P<contacts>[^|]+))'

@@ -3,40 +3,25 @@
 Use [Elasticsearch] cluster (https://www.elastic.co/products/elasticsearch)
 using bulk / msearch / update API.
 
-Require python Elastic client 'python-elasticsearch'
+Require python Elastic client 'elasticsearch' (Pypi)
 
 ### Setup
 
-Elasticsearch templates :
+Elasticsearch scripts (must be deployed manually on all nodes) :
 
-  * STATUS INDEX : in status.template file
+  * UPDATE SCRIPT : tantale.groovy
 
-  * LOGS INDEX : in status_logs.template
+Elasticsearch templates (will be pushed by tantale) :
 
-  * UPDATE SCRIPT (Groovy) - must be set manually (elasticsearch security) :
+  * STATUS INDEX : status.template
 
-Path may be /etc/elasticsearch/scripts/tantale.groovy
-
-```
-ctx._source.last_check = timestamp
-ctx._source.output = output
-ctx._source.contacts = contacts
-
-if (ctx._source.status != status) {
-    ctx._source.status = status
-    ctx._source.timestamp = timestamp
-    ctx._source.output = output
-    if (ctx._source.ack == 1) {
-        ctx._source.ack = 0
-    }
-}
+  * LOGS INDEX : status_logs.template
 
 ### Description
 
 Post check to "status" index with id unicity (<hostname>-<check_name>)
-using "update/upsert" API, script maintain correct timestamp/last_check values.
-
-Timestamp returned in update query ()
+using "update/upsert" API, script "tantale.groovy" manage
+acknowledge and timestamp (last_change) and last_check values.
 
 """
 
