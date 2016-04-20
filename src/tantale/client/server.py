@@ -33,7 +33,7 @@ class Client(object):
     """
     def __init__(self, config):
         # Initialize Logging
-        self.log = logging.getLogger('tantale')
+        self.log = logging.getLogger('tantale.client')
 
         # Process signal
         self.running = True
@@ -126,8 +126,9 @@ class Client(object):
             for fd in r:
                 if fd == diamond_fd:
                     try:
-                        result += self.process_diamond(
-                            self.read_fifo(diamond_fd))
+                        res = self.read_fifo(diamond_fd)
+                        if res:
+                            result += self.process_diamond(res)
                     except:
                         self.log.debug(
                             'Diamond error:\n%s' % traceback.format_exc())

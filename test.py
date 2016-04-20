@@ -227,22 +227,16 @@ if __name__ == "__main__":
     # Parse Command Line Args
     (options, args) = parser.parse_args()
 
-    # Disable normal logging
-    from tantale.utils import DebugFormatter
-    root = logging.getLogger()
-    root.addHandler(logging.NullHandler())
-    log = logging.getLogger("tantale")
-    handler = logging.StreamHandler(sys.stderr)
-    log.addHandler(handler)
-    if options.log:
-        if options.debug:
-            log.setLevel(logging.DEBUG)
-        else:
-            log.setLevel(logging.INFO)
-        handler.setFormatter(DebugFormatter())
-        handler.setLevel(logging.DEBUG)
-    else:
-        log.disabled = True
+    # Initialize logging
+    from tantale.utils import set_logging_config
+    set_logging_config()
+
+    log = logging.getLogger('tantale')
+    if not options.log:
+        log.handlers = [logging.NullHandler()]
+
+    if options.debug:
+        log.setLevel(logging.DEBUG)
 
     # Load
     tests = getTests('tantale')

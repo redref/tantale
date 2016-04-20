@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import json
 import time
+import logging
 import traceback
 from datetime import datetime
 
@@ -13,6 +14,10 @@ from tantale.input.check import Check
 
 
 class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
+    def __init__(self, config=None):
+        self.log = logging.getLogger('tantale.input')
+        super(ElasticsearchBackend, self).__init__(config)
+
     def process(self, check):
         """
         Process a check by storing it in memory
@@ -254,7 +259,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         """
         if not self._connect():
             self._throttle_error(
-                "ElasticsearchBackend: not connected, queuing")
+                self.log, "ElasticsearchBackend: not connected, queuing")
             return
 
         try:
@@ -268,6 +273,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         except Exception:
             self._throttle_error(
+                self.log,
                 "ElasticsearchBackend: uncatched error sending checks")
             self.log.debug("Trace :\n%s" % traceback.format_exc())
 

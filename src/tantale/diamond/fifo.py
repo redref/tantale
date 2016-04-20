@@ -71,7 +71,7 @@ class FifoHandler(Handler):
             self.open()
 
         if not self.fifo:
-            self._throttle_error('FifoHandler: failed to open FIFO')
+            self._throttle_error(self.log, 'FifoHandler: failed to open FIFO')
 
         if self.fifo:
             try:

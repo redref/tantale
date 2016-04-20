@@ -93,41 +93,43 @@ backlog_size = 50 # keep X checks into memory when backend failing (before trim)
 
 ################################################################################
 ### Options for logging
-# for more information on file format syntax:
-# http://docs.python.org/library/logging.config.html#configuration-file-format
+# Will be merged with tantale minimal configuration.
+# You may need to use or override minimal configuration defined objects 
+# Here a list of usefull ones
 
-[loggers]
-keys = root,tantale
+# [[handlers]]
+# [[[stdout]]]
+# class = logging.StreamHandler
+# level = NOTSET
+# formatter = default
+# stream = ext://sys.stdout
+# [[[null]]]
+# class = logging.NullHandler
+# level = NOTSET
+# [[formatters]]
+# [[[default]]]
+# format = '[%(asctime)s] %(levelname)8s [%(processName)s] %(message)s'
+# datefmt = '%Y-%m-%d %H:%M:%S'
 
-[handlers]
-keys = null,rotated_file
+[logging]
 
-[formatters]
-keys = default
+[[loggers]]
 
-[logger_root]
+[[[tantale]]]
 level = INFO
-handlers = null
-propagate = 1
 
-[logger_tantale]
-level = INFO
-handlers = rotated_file
-qualname = tantale
+# Example overriding livestatus specific logger
+# [[[tantale.livestatus]]]
+# level = DEBUG
 
-[handler_rotated_file]
-class = handlers.TimedRotatingFileHandler
-level = DEBUG
+[[handlers]]
+
+[[[rotated_file]]]
+class = logging.handlers.TimedRotatingFileHandler
+level = NOTSET
 formatter = default
 # rotate at midnight, each day and keep 7 days
-args = ('/var/log/tantale/tantale.log', 'midnight', 1, 7)
-
-[handler_null]
-class = logging.NullHandler
-level = DEBUG
-formatter = default
-args = ()
-
-[formatter_default]
-format = [%(asctime)s] %(levelname)8s [%(processName)s] %(message)s
-datefmt =
+filename = /var/log/tantale/tantale.log
+when = midnight
+interval = 1
+backupCount = 7

@@ -186,7 +186,8 @@ class ElasticsearchBaseBackend(BaseBackend):
                         name, body=json.dumps(template))
             except:
                 # Log Error
-                self._throttle_error("ElasticsearchBackend: connection failed")
+                self._throttle_error(
+                    self.log, "ElasticsearchBackend: connection failed")
                 self.log.debug("Traceback :\n%s" % traceback.format_exc())
                 # Clean
                 self._close()

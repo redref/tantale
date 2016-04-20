@@ -114,29 +114,16 @@ def main():
             sys.exit(1)
 
         # Initialize Logging
-        from tantale.utils import DebugFormatter
+        from tantale.utils import set_logging_config
         log = logging.getLogger('tantale')
-
-        if options.log_stdout:
-            if options.log_debug:
-                log.setLevel(logging.DEBUG)
-            else:
-                log.setLevel(logging.INFO)
-            streamHandler = logging.StreamHandler(sys.stdout)
-            streamHandler.setFormatter(DebugFormatter())
-            streamHandler.setLevel(logging.DEBUG)
-            log.addHandler(streamHandler)
+        if not options.log_stdout:
+            if 'logging' in config:
+                set_logging_config(config=config['logging'])
         else:
-            try:
-                logging.config.fileConfig(
-                    options.configfile, disable_existing_loggers=False)
-            except:
-                import traceback
-                print("Error occurs when initialize logging: ",
-                      file=sys.stderr)
-                print("Traceback: %s" % traceback.format_exc(),
-                      file=sys.stderr)
-                sys.exit(1)
+            set_logging_config()
+
+        if options.log_debug:
+            log.setLevel(logging.DEBUG)
 
     # Pass the exit up stream rather then handle it as an general exception
     except SystemExit as e:

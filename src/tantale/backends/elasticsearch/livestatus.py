@@ -5,12 +5,17 @@ from __future__ import print_function
 import json
 import copy
 import time
+import logging
 
 from tantale.backends.elasticsearch.base import ElasticsearchBaseBackend
 from tantale.livestatus.backend import Backend
 
 
 class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
+    def __init__(self, config=None):
+        self.log = logging.getLogger('tantale.livestatus')
+        super(ElasticsearchBackend, self).__init__(config)
+
     def convert_expr(self, field, operator, value=None):
         """ Convert tantale expression to elasticsearch filter """
         # Handle booleans (and/or/not)

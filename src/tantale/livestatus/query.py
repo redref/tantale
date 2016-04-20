@@ -93,7 +93,7 @@ class Query(object):
         rheader=None, oformat='csv', keepalive=None, headers=False,
         separators=['\n', ';', ',', '|']
     ):
-        self.log = logging.getLogger('tantale')
+        self.log = logging.getLogger('tantale.livestatus')
 
         self.output_sock = output_sock
         self.method = method
@@ -376,7 +376,7 @@ class Query(object):
         table = None
         options = {}
 
-        log = logging.getLogger('tantale')
+        log = logging.getLogger('tantale.livestatus')
         log.debug("Livestatus query :\n%s" % string)
 
         try:

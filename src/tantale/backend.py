@@ -14,8 +14,6 @@ class BaseBackend(object):
     """
 
     def __init__(self, config=None):
-        self.log = logging.getLogger('tantale')
-
         self.enabled = True
 
         #
@@ -49,7 +47,7 @@ class BaseBackend(object):
             'server_error_interval': 120,
         }
 
-    def _throttle_error(self, msg, *args, **kwargs):
+    def _throttle_error(self, logger, msg, *args, **kwargs):
         """
         Wrapper around log.error
         Avoids sending errors repeatedly. Waits at least
@@ -63,13 +61,13 @@ class BaseBackend(object):
         if msg in self._errors:
             if ((now - self._errors[msg]) >=
                     self.server_error_interval):
-                fn = self.log.error
+                fn = logger.error
                 self._errors[msg] = now
             else:
-                fn = self.log.debug
+                fn = logger.debug
         else:
             self._errors[msg] = now
-            fn = self.log.error
+            fn = logger.error
 
         return fn(msg, *args, **kwargs)
 

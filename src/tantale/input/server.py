@@ -33,7 +33,7 @@ class InputServer(object):
     """
     def __init__(self, config):
         # Initialize Logging
-        self.log = logging.getLogger('tantale')
+        self.log = logging.getLogger('tantale.input')
 
         # Process signal
         self.running = True
@@ -182,7 +182,6 @@ class InputServer(object):
         def sig_handler(signum, frame):
             self.log.debug("%s received" % signum)
             self.running = False
-            sys.exit(1)
         signal.signal(signal.SIGTERM, sig_handler)
 
         # Load backends

@@ -26,7 +26,7 @@ class Server(object):
     """
     def __init__(self, configfile):
         # Initialize Logging
-        self.log = logging.getLogger('tantale')
+        self.log = logging.getLogger()
         # Process signal
         self.running = True
         # Initialize Members
@@ -63,9 +63,11 @@ class Server(object):
 
         processes = []
         init_events = []
+        got_signal = False
 
         # Set the signal handlers
         def sig_handler(signum, frame):
+            got_signal = True
             self.log.debug("%s received" % signum)
         signal.signal(signal.SIGINT, sig_handler)
         signal.signal(signal.SIGTERM, sig_handler)
@@ -148,11 +150,12 @@ class Server(object):
 
         # Check our sub-processes are ready
         for event in init_events:
-            self.log.info('INIT DONE')
+            # Maximum time starting
             event.wait(15)
         _onInitDone()
 
-        signal.pause()
+        if not got_signal:
+            signal.pause()
 
         for child in processes:
             self.log.debug('Terminate %s process' % child.name)

@@ -1,37 +1,42 @@
 # coding=utf-8
 
 from __future__ import print_function
+
+import os
 import sys
 import imp
 import inspect
 import logging
 import logging.config
+import configobj
 from six import string_types
 
 
-class DebugFormatter(logging.Formatter):
+def set_logging_config(config=None):
+    if not config:
+        config_min_f = os.path.join(
+            os.path.dirname(__file__), 'config_min.conf')
+        config_min = configobj.ConfigObj(config_min_f)
+        config = config_min['logging']
 
-    def __init__(self, fmt=None):
-        if fmt is None:
-            fmt = ('%(created)10s\t' +
-                   '%(processName)15s\t%(process)d\t%(levelname)8s\t' +
-                   '%(message)s')
-        self.fmt_default = fmt
-        self.fmt_prefix = fmt.replace('%(message)s', '')
-        logging.Formatter.__init__(self, fmt)
+    # Adapt config to logging format
+    config['version'] = 1
 
-    def format(self, record):
-        self._fmt = self.fmt_default
+    for logger in config['loggers']:
+        if 'propagate' in config['loggers'][logger]:
+            config['loggers'][logger]['propagate'] = \
+                str_to_bool(config['loggers'][logger]['propagate'])
 
-        if record.levelno in [logging.ERROR, logging.CRITICAL]:
-            self._fmt = ''
-            self._fmt += self.fmt_prefix
-            self._fmt += '%(message)s'
-            self._fmt += '\n'
-            self._fmt += self.fmt_prefix
-            self._fmt += '%(pathname)s:%(lineno)d'
+    for handler in config['handlers']:
+        for field in config['handlers'][handler]:
+            try:
+                config['handlers'][handler][field] = \
+                    int(config['handlers'][handler][field])
+            except ValueError:
+                pass
 
-        return logging.Formatter.format(self, record)
+    # Apply it
+    logging.config.dictConfig(config)
 
 
 def str_to_bool(value):

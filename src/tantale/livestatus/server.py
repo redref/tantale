@@ -27,7 +27,7 @@ class LivestatusServer(object):
     """
     def __init__(self, config):
         # Initialize Logging
-        self.log = logging.getLogger('tantale')
+        self.log = logging.getLogger('tantale.livestatus')
 
         # Process signal
         self.stop = Event()
