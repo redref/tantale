@@ -7,8 +7,6 @@ LIVESTATUS : not wired logics (necessary ?)
 
 Input : TTL in place of batch_size - dynamic batch size
 
-Log : different loggers by process
-
 LIVESTATUS: events filters
 
 TESTS COVERAGE

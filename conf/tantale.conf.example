@@ -55,15 +55,15 @@ nagios_fifo = /dev/shm/nagios_fifo
 # Checks definition
 [[[root]]]
 type = diamond
-metric_prefix = servers.my_fqdn
-hostname = fqdn
+metric_prefix = servers.domain.my_fqdn
+hostname = fqdn.domain
 thresholds = 10,20,"",""
 expression = {diskspace.root.byte_free} / {diskspace.root.byte_avail} * 100
 
 [[[Host]]]
 type = diamond
-metric_prefix = servers.my_fqdn
-hostname = fqdn
+metric_prefix = servers.domain.my_fqdn
+hostname = fqdn.domain
 thresholds = 10,20,20,80
 expression = {diskspace.root.byte_percentfree}
 
