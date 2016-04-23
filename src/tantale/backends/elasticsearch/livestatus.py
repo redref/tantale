@@ -136,11 +136,11 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
     def logs_query(self, query):
         """ Process GET query over log indexes (with sort) """
-        es_meta = {"index": "%s-*" % self.log_index, '_type': 'event',
-                   'sort': [{"timestamp": "desc"}]}
-        return self._search_query(query, es_meta)
+        es_meta = {"index": "%s-*" % self.log_index, '_type': 'event'}
+        sort = [{"timestamp": "desc"}]
+        return self._search_query(query, es_meta, sort)
 
-    def _search_query(self, query, es_meta):
+    def _search_query(self, query, es_meta, sort=None):
         """ Internally process GET queries """
         es_query = {}
 
@@ -175,6 +175,8 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         # Normal query / return lines
         else:
+            if sort:
+                es_query['sort'] = sort
             if query.limit:
                 es_query['size'] = query.limit
 
@@ -190,8 +192,10 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     'Elasticsearch error response:\n%s' % response)
                 return 0
 
+            self.log.debug(response)
             count = response['hits']['total']
             for hit in response['hits']['hits']:
+                self.log.debug('HIT : ' + repr(hit))
                 line = hit['_source']
                 if 'last_check' not in line:
                     line['last_check'] = line['timestamp']
