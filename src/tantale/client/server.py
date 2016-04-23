@@ -129,6 +129,11 @@ class Client(object):
                         res = self.read_fifo(diamond_fd)
                         if res:
                             result += self.process_diamond(res)
+                        else:
+                            # Reopen on blocking
+                            old = diamond_fd
+                            diamond_fd = self.open_fifo(self.diamond_fifo)
+                            os.close(old)
                     except:
                         self.log.debug(
                             'Diamond error:\n%s' % traceback.format_exc())
@@ -139,6 +144,11 @@ class Client(object):
                         res = self.read_fifo(nagios_fd)
                         if res:
                             result += self.process_nagios(res)
+                        else:
+                            # Reopen on blocking
+                            old = nagios_fd
+                            nagios_fd = self.open_fifo(self.nagios_fifo)
+                            os.close(old)
                     except:
                         self.log.debug(
                             'Nagios error:\n%s' % traceback.format_exc())
@@ -173,7 +183,7 @@ class Client(object):
             else:
                 return False
         except BlockingIOError:
-            pass
+            return False
         except Exception as exc:
             # Python 2 BlockingIOError
             if isinstance(exc, OSError) and exc.errno == 11:
@@ -202,6 +212,8 @@ class Client(object):
         if not self.sock:
             self.log.debug(
                 'Reconnect to %s:%s failed' % (self.host, self.port))
+
+        self.log.debug("Sending: %s" % result.strip())
 
         try:
             self.sock.send(bytes(result))
@@ -259,8 +271,6 @@ class Client(object):
                     else:
                         result += "\n"
 
-        if result != "":
-            self.log.debug("Sending: %s" % result.strip())
         return result
 
     def range_check(
