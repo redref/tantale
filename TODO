@@ -5,8 +5,6 @@ INPUT : notifications ? alerting functions ?
 
 LIVESTATUS : not wired logics (necessary ?)
 
-Input : TTL in place of batch_size - dynamic batch size
-
 LIVESTATUS: events filters
 
 TESTS COVERAGE

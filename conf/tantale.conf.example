@@ -29,6 +29,9 @@ port = 6557
 enabled = True
 port = 2003
 
+# Max time (in seconds) check may wait others (in backend POV)
+ttl = 5
+
 # Freshness timeout (warning if check not fresh)
 #  status => 1, ouput prefixed with 'OUTDATED '
 # freshness_timeout = 120
@@ -88,8 +91,10 @@ log_index_rotation = 'daily'
 request_timeout = 30
 
 # Backend specific options
-batch = 2 # group checks update by X
-backlog_size = 50 # keep X checks into memory when backend failing (before trim)
+# Maximum size for batch update
+batch = 1000
+# maximum checks keeped in memory (FIFO) in case backend failing (trim)
+backlog_size = 500
 
 ################################################################################
 ### Options for logging

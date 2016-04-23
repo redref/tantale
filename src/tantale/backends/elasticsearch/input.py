@@ -26,7 +26,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         # Append the data to the array as a string
         self.checks.append(check)
         if len(self.checks) >= self.batch_size:
-            self._send()
+            self.send()
 
     def flush(self):
         """
@@ -35,7 +35,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         """
         while len(self.checks) > 0:
             before = len(self.checks)
-            self._send()
+            self.send()
             if before == len(self.checks):
                 break
 
@@ -253,7 +253,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             if 'errors' in res and res['errors'] != 0:
                 self.log.warn("ElasticsearchBackend: log_send error found")
 
-    def _send(self):
+    def send(self):
         """
         Send data. Queue on error
         """

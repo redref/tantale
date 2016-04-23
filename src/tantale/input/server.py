@@ -12,6 +12,7 @@ import time
 import socket
 import select
 from six import b as bytes
+from threading import Thread, Lock
 
 from tantale.utils import load_backend
 from tantale.input.check import Check
@@ -42,6 +43,11 @@ class InputServer(object):
         self.config = config
 
         self.port = int(self.config['modules']['Input']['port'])
+
+        self.ttl = None
+        if self.config['modules']['Input']['ttl']:
+            self.ttl = int(self.config['modules']['Input']['ttl'])
+
         self.freshness_timeout = None
         if self.config['modules']['Input']['freshness_timeout']:
             self.freshness_timeout = int(
@@ -154,19 +160,45 @@ class InputServer(object):
             self.log.critical('No available backends')
             return
 
+        send_lock = Lock()
+
+        def ttl_thread(ttl, backend):
+            time.sleep(ttl)
+            # Force send it ttl reached
+            if (len(backend.checks) > 0 and
+               (time.time() - backend.checks[0].parsing_ts) >= ttl):
+                send_lock.acquire()
+                backend.send()
+                send_lock.release()
+
         # Logic
         while self.running:
             try:
                 check = check_queue.get(block=True, timeout=None)
             except EOFError:
                 break
+
             if check is not None:
+                check = Check.parse(check, self.log)
                 # self.log.debug('Check: %s' % check.strip())
+
                 for backend in backends:
-                    backend._process(Check.parse(check, self.log))
+                    send_lock.acquire()
+                    backend._process(check)
+                    send_lock.release()
+
+                    if (self.ttl and len(backend.checks) > 0 and
+                       (not backend.ttl_thread or
+                       not backend.ttl_thread.isAlive())):
+                        backend.ttl_thread = Thread(
+                            target=ttl_thread, args=(self.ttl, backend))
+                        backend.ttl_thread.daemon = True
+                        backend.ttl_thread.start()
+
                 check_queue.task_done()
+
             else:
-                # Call on terminate to flush cache
+                # Terminate branch
                 self.running = False
                 for backend in backends:
                     backend._flush()

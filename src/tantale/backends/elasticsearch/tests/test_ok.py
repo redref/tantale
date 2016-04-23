@@ -59,18 +59,14 @@ class ElasticsearchTC(TantaleTC):
         self.stop()
 
     def test_Workflow(self):
+        config = {'backends': {
+            'ElasticsearchBackend': {'recreate_index_for_test': True}
+        }}
         if self.bench:
-            config = {'backends': {
-                'ElasticsearchBackend': {
-                    'batch': 1000, 'recreate_index_for_test': True}
-            }}
             hosts_nb = 2000
             services_per_host = 3
         else:
-            config = {'backends': {
-                'ElasticsearchBackend': {
-                    'batch': 5, 'recreate_index_for_test': True}
-            }}
+
             hosts_nb = 10
             services_per_host = 3
 
@@ -160,20 +156,15 @@ class ElasticsearchTC(TantaleTC):
     def test_Freshness(self):
         # Low freshness timeout to bypass loop time
         config = {
-            "modules": {"Input": {"freshness_timeout": 3}}
+            "modules": {"Input": {"freshness_timeout": 3}},
+            "backends": {
+                'ElasticsearchBackend': {'recreate_index_for_test': True}},
         }
+
         if self.bench:
-            config['backends'] = {
-                'ElasticsearchBackend': {
-                    'batch': 1000, 'recreate_index_for_test': True}
-            }
             hosts_nb = 2000
             services_per_host = 3
         else:
-            config['backends'] = {
-                'ElasticsearchBackend': {
-                    'batch': 5, 'recreate_index_for_test': True}
-            }
             hosts_nb = 10
             services_per_host = 3
 

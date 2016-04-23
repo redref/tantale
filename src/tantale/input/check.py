@@ -3,6 +3,7 @@
 from __future__ import print_function
 from six import integer_types
 import re
+import time
 
 
 class Check(object):
@@ -11,7 +12,7 @@ class Check(object):
     # up storing a large number of objects in the queue waiting for the
     # handlers to flush.
     __slots__ = [
-        'type', 'tags', 'id',
+        'type', 'tags', 'id', 'parsing_ts',
         'timestamp', 'hostname', 'check', 'status', 'output',
         'contacts',
     ]
@@ -40,6 +41,7 @@ class Check(object):
         """
         # No Value error here (regexp verify it)
         self.status = int(status)
+        self.parsing_ts = time.time()
         self.timestamp = int(timestamp)
 
         self.hostname = hostname

@@ -11,6 +11,7 @@ class Backend(BaseBackend):
     def __init__(self, config=None):
         super(Backend, self).__init__(config)
 
+        self.ttl_thread = None
         self.checks = []
         self.logs = []
 
@@ -38,7 +39,13 @@ class Backend(BaseBackend):
 
     def process(self, check):
         """
-        Process
+        Process (add check to stack)
+        """
+        raise NotImplementedError
+
+    def process(self, check):
+        """
+        Process stack to backend
         """
         raise NotImplementedError
 
