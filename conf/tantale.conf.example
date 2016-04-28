@@ -122,6 +122,7 @@ backlog_size = 500
 
 [[[tantale]]]
 level = INFO
+handlers = rotated_file,
 
 # Example overriding livestatus specific logger
 # [[[tantale.livestatus]]]

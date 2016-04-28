@@ -7,4 +7,6 @@ LIVESTATUS : not wired logics (necessary ?)
 
 LIVESTATUS: events filters
 
-TESTS COVERAGE
+TESTS COVERAGE on excepts/...
+
+DOC
