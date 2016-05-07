@@ -5,6 +5,7 @@ from __future__ import print_function
 import re
 import time
 import random
+import json
 
 import configobj
 from test import TantaleTC
@@ -25,25 +26,32 @@ class ElasticsearchTC(TantaleTC):
             return 0
 
     def push_checks(self, hosts_nb, services_per_host, delay=0):
-        """ Input """
-        input_s = self.getSocket('Input')
-        # Generate some checks
-        checks = []
+        """ Simulate X Hosts pushing hash """
         for host in range(hosts_nb):
-            checks.append(
-                (int(time.time()) - delay, host, self.randStatus(host), host))
-            input_s.send(
-                "%d host_%d Host %d out ><&(){}[],;:!\\|user_1,user_%d\n" %
-                checks[-1])
+
+            input_s = self.getSocket('Input')
+
+            checks = {}
+
+            checks['Host'] = {
+                "status": self.randStatus(host),
+                "timestamp": (int(time.time()) - delay),
+                "contacts": ["user_1", "user_%d" % host],
+                "hostname": "host_%d" % host,
+                "output": "Check %d" % host,
+            }
 
             for service in range(services_per_host):
-                checks.append((
-                    int(time.time()) - delay,
-                    host, service, self.randStatus(service), host))
-                input_s.send(
-                    "%d host_%d service_%d %d output %%|user_1,user_%d\n" %
-                    checks[-1])
-        input_s.close()
+                checks['service_%d' % service] = {
+                    "status": self.randStatus(service),
+                    "timestamp": (int(time.time()) - delay),
+                    "contacts": ["user_1", "user_%d" % host],
+                    "hostname": "host_%d" % host,
+                    "output": "Service %d" % service,
+                }
+
+            input_s.send(json.dumps(checks) + "\n")
+            input_s.close()
 
     def test_Status(self):
         self.start()

@@ -2,8 +2,9 @@
 
 from __future__ import print_function
 from six import integer_types
-import re
+import json
 import time
+import traceback
 
 
 class Check(object):
@@ -24,25 +25,15 @@ class Check(object):
     log_fields = [
         'last_check', 'hostname', 'check', 'status', 'output']
 
-    pattern = re.compile(
-        r'^'
-        '(?P<timestamp>[0-9]+)\s+'
-        '(?P<hostname>[^\s]+)\s+'
-        '(?P<check>[^\s]+)\s+'
-        '(?P<status>[0-3])\s+'
-        '(?P<output>.*?)'
-        '(|\|(?P<contacts>[^|]+))'
-        '$')
-
-    def __init__(self, timestamp=None, hostname=None, check=None,
+    def __init__(self, check, timestamp=None, hostname=None,
                  status=None, output=None, contacts=None, **tags):
         """
         Create new instance
         """
-        # No Value error here (regexp verify it)
         self.status = int(status)
         self.parsing_ts = time.time()
         self.timestamp = int(timestamp)
+        self.contacts = contacts
 
         self.hostname = hostname
         if check == 'Host':
@@ -55,10 +46,6 @@ class Check(object):
         self.check = check
         self.output = output
 
-        self.contacts = []
-        if contacts:
-            self.contacts = contacts.split(',')
-
         if tags:
             self.tags = tags
         else:
@@ -67,16 +54,22 @@ class Check(object):
     @classmethod
     def parse(cls, string, log):
         """
-        Parse a string and create a check
+        Generate Checks object on JSON hash
         """
-        match = re.match(cls.pattern, string)
         try:
-            groups = match.groupdict()
-            return Check(**groups)
+            checks_hash = json.loads(string)
         except:
-            import traceback
-            log.info('CHECK: Error parsing check %s' % string.strip())
-            log.debug('CHECK: %s' % traceback.format_exc())
+            log.warn('Error loading client JSON')
+            log.debug(traceback.format_exc())
+            log.debug(string)
+            return
+
+        for name in checks_hash:
+            try:
+                yield Check(name, **checks_hash[name])
+            except:
+                log.info('CHECK: Error on %s - %s' % (name, checks_hash[name]))
+                log.debug(traceback.format_exc())
 
     def __getstate__(self):
         return dict(

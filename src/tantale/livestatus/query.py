@@ -46,6 +46,7 @@ FIELDS_DUMMY = {
     "in_notification_period": 1,
     "active_checks_enabled": 0,
     "pnpgraph_present": 0,
+    "host_action_url_expanded": None,
     "retry_interval": 60,
     "check_interval": 60,
     "last_time_ok": 0,
@@ -160,15 +161,14 @@ class Query(object):
             self.append({'name': 'tantale', 'alias': 'tantale'})
             return
 
-        # downtimes table / converted to services+hosts query
+        # downtimes table / add filter
         elif self.table == 'downtimes':
-            self.table = 'services_and_hosts'
             if self.filters:
                 self.filters.append(['downtime', '!=', 0])
             else:
                 self.filters = [['downtime', '!=', 0]]
 
-        # DO IT
+        # Request backend
         for backend in backends:
             length = backend._query(self)
 
@@ -181,18 +181,25 @@ class Query(object):
         """ Map back tantale results columns to queried columns """
         if self.columns:
             mapped_res = []
-            for field in self.columns:
+            for req_field in self.columns:
                 # Remove object related prefix
-                if field.startswith("host_"):
-                    field = field[5:]
-                if field.startswith("service_"):
-                    field = field[8:]
-                if field.startswith("log_"):
-                    field = field[4:]
+                if req_field.startswith("host_"):
+                    field = req_field[5:]
+                elif req_field.startswith("service_"):
+                    field = req_field[8:]
+                elif req_field.startswith("log_"):
+                    field = req_field[4:]
+                else:
+                    field = req_field
 
                 # Search for columns
                 map_name = False
-                if field in result:
+
+                if self.table == 'services' and req_field == 'host_state':
+                    mapped_res.append(0)
+                    continue
+
+                elif field in result:
                     map_name = field
                 elif field in FIELDS_MAPPING:
                     map_name = FIELDS_MAPPING[field]

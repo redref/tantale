@@ -76,7 +76,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 except Exception as e:
                     self.log.debug(
                         "ElasticsearchBackend: failed to get outdated"
-                        "\n%s" % e)
+                        "%s" % e)
                     break
 
                 if result['hits']['total'] == 0:
@@ -87,20 +87,20 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 body = ""
                 for hit in result['hits']['hits']:
                     # Change status to 1 and output prefix
-                    changed = False
+                    changed = None
                     if hit['_source']['status'] == 0:
                         status = outdated_status
                         changed = True
                     else:
                         status = hit['_source']['status']
                     if not hit['_source']['output'].startswith(prefix):
+                        changed = False
                         output = "%s%s" % (prefix, hit['_source']['output'])
-                        changed = True
                     else:
                         output = hit['_source']['output']
 
                     # If changed, construct request
-                    if changed:
+                    if changed is not None:
                         # Metadata for an update
                         metadata = {"update": {
                             "_index": self.status_index,
@@ -151,7 +151,8 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                             self.log.debug(
                                 "Trace :\n%s" % traceback.format_exc())
 
-                    self._send_to_logs()
+                    if changed:
+                        self._send_to_logs()
 
         except SystemExit:
             # Handle process exit

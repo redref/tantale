@@ -26,7 +26,7 @@ class Server(object):
     """
     def __init__(self, configfile):
         # Initialize Logging
-        self.log = logging.getLogger()
+        self.log = logging.getLogger('tantale')
         # Process signal
         self.running = True
         # Initialize Members
@@ -147,21 +147,23 @@ class Server(object):
 
         if len(processes) == 0:
             self.log.critical('No modules enabled. Quitting')
+        else:
+            # Check our sub-processes are ready
+            for event in init_events:
+                # Maximum time starting
+                event.wait(15)
 
-        # Check our sub-processes are ready
-        for event in init_events:
-            # Maximum time starting
-            event.wait(15)
-        _onInitDone()
+            # We are ready
+            _onInitDone()
 
-        if not got_signal:
-            signal.pause()
+            if not got_signal:
+                signal.pause()
 
-        for child in processes:
-            self.log.debug('Terminate %s process' % child.name)
-            child.terminate()
+            for child in processes:
+                self.log.debug('Terminate %s process' % child.name)
+                child.terminate()
 
-        for child in processes:
-            child.join()
+            for child in processes:
+                child.join()
 
         self.log.info('Exit')

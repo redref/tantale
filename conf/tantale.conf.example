@@ -34,14 +34,18 @@ ttl = 5
 
 # Freshness timeout (warning if check not fresh)
 #  status => 1, ouput prefixed with 'OUTDATED '
-# freshness_timeout = 120
+#freshness_timeout = 120
 
 # Maximum number of checks waiting to be processed.
 # When queue is full, new are dropped.
 queue_size = 16384
 
 [[Client]]
-enabled = False
+# enabled = False
+
+# Global refresh interval
+#   Force push every X seconds
+# interval = 30
 
 # Tantale Input server
 server_host = 127.0.0.1
@@ -50,25 +54,49 @@ server_port = 2003
 # Contacts_groups for the host
 contacts = user_1, user_2
 
-# Where to read checks
+# Diamond source configuration
 diamond_fifo = /dev/shm/diamond_to_fifo
-nagios_fifo = /dev/shm/nagios_fifo
+
+# External source configuration
+#   Pre-forked workers number
+# external_workers = 3
 
 # Checks definition
-# Checks definition
-[[[root]]]
-type = diamond
-metric_prefix = servers.domain.my_fqdn
-hostname = fqdn.domain
-thresholds = 10,20,"",""
-expression = {diskspace.root.byte_free} / {diskspace.root.byte_avail} * 100
 
+# Shared config keys
+#   hostname = <local fqdn>
+#     usefull to submit checks for other hosts
+#   interval = 60
+#     launch check every X seconds
+
+# Host check - wired to host livestatus object
 [[[Host]]]
+# "ok" report sucessfull at any time
+type = ok
+
+# Process ('ps') source example
+[[[ps_example]]]
+type = ps
+regexp = 'rsyslog(|d)($| )'
+# Check number of process (low crit, low warn, up warn, up crit)
+thresholds = 1,1,1,1
+
+# External commands source example
+[[[external_example]]]
+type = external
+command = /bin/bash -c 'echo fail; exit 1'
+
+# Diamond source example
+[[[fs_root]]]
 type = diamond
-metric_prefix = servers.domain.my_fqdn
-hostname = fqdn.domain
-thresholds = 10,20,20,80
-expression = {diskspace.root.byte_percentfree}
+
+# Must match diamond metric prefix
+#   Default : ""
+prefix = servers.domain.my_fqdn
+
+# Math on expression, then check value range (low crit, low warn, up warn, up crit)
+expression = {diskspace.root.byte_free} / {diskspace.root.byte_avail} * 100
+thresholds = 10, 20, "", ""
 
 ################################################################################
 ### Options for backends
@@ -125,8 +153,8 @@ level = INFO
 handlers = rotated_file,
 
 # Example overriding livestatus specific logger
-# [[[tantale.livestatus]]]
-# level = DEBUG
+#[[[tantale.livestatus]]]
+#level = DEBUG
 
 [[handlers]]
 
@@ -134,7 +162,7 @@ handlers = rotated_file,
 class = logging.handlers.TimedRotatingFileHandler
 level = NOTSET
 formatter = default
-# rotate at midnight, each day and keep 7 days
+# Rotate at midnight, each day and keep 7 days
 filename = /var/log/tantale/tantale.log
 when = midnight
 interval = 1

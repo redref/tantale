@@ -82,7 +82,7 @@ setup(
     package_dir={'': 'src'},
     packages=find_packages('src', exclude=["tests"]),
     package_data={'': ['*.*']},
-    scripts=['bin/tantale', 'bin/tantale_check_wrapper'],
+    scripts=['bin/tantale'],
     data_files=data_files,
     install_requires=install_requires,
     classifiers=[

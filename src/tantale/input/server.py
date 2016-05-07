@@ -174,26 +174,26 @@ class InputServer(object):
         # Logic
         while self.running:
             try:
-                check = check_queue.get(block=True, timeout=None)
+                string = check_queue.get(block=True, timeout=None)
             except EOFError:
                 break
 
-            if check is not None:
-                check = Check.parse(check, self.log)
-                # self.log.debug('Check: %s' % check.strip())
+            if string is not None:
 
-                for backend in backends:
-                    send_lock.acquire()
-                    backend._process(check)
-                    send_lock.release()
+                for check in Check.parse(string, self.log):
 
-                    if (self.ttl and len(backend.checks) > 0 and
-                       (not backend.ttl_thread or
-                       not backend.ttl_thread.isAlive())):
-                        backend.ttl_thread = Thread(
-                            target=ttl_thread, args=(self.ttl, backend))
-                        backend.ttl_thread.daemon = True
-                        backend.ttl_thread.start()
+                    for backend in backends:
+                        send_lock.acquire()
+                        backend._process(check)
+                        send_lock.release()
+
+                        if (self.ttl and len(backend.checks) > 0 and
+                           (not backend.ttl_thread or
+                           not backend.ttl_thread.isAlive())):
+                            backend.ttl_thread = Thread(
+                                target=ttl_thread, args=(self.ttl, backend))
+                            backend.ttl_thread.daemon = True
+                            backend.ttl_thread.start()
 
                 check_queue.task_done()
 

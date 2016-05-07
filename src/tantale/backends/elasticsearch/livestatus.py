@@ -115,7 +115,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         if query.method in ('ack', 'downtime'):
             self.update_query(query)
-        elif query.table == 'services_and_hosts':
+        elif query.table == 'downtimes':
             return self.status_query(query, None)
         elif query.table == 'services':
             return self.status_query(query, 'service')
@@ -192,10 +192,8 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     'Elasticsearch error response:\n%s' % response)
                 return 0
 
-            self.log.debug(response)
             count = response['hits']['total']
             for hit in response['hits']['hits']:
-                self.log.debug('HIT : ' + repr(hit))
                 line = hit['_source']
                 if 'last_check' not in line:
                     line['last_check'] = line['timestamp']

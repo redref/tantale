@@ -3,10 +3,12 @@ LIVESTATUS : acknowledge / downtime comments
 
 INPUT : notifications ? alerting functions ?
 
-LIVESTATUS : not wired logics (necessary ?)
+LIVESTATUS : events filters
 
-LIVESTATUS: events filters
+LIVESTATUS : host_num_services_*
 
 TESTS COVERAGE on excepts/...
 
 DOC
+
+User behavior, not overwriting, ...

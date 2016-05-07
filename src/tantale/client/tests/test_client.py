@@ -8,11 +8,12 @@ import time
 from six import b as bytes
 
 import configobj
+import socket
+
 from test import TantaleTC
 
 my_folder = os.path.dirname(os.path.abspath(__file__))
 diamond_fifo = os.path.join(my_folder, '.test_diamond_fifo')
-nagios_fifo = os.path.join(my_folder, '.test_nagios_fifo')
 
 diamond_input = """servers.domain.my_fqdn.diskspace.root.byte_percentfree 90.90
 servers.domain.my_fqdn.diskspace.root.byte_used 11017080832.00
@@ -44,7 +45,7 @@ class ClientTC(TantaleTC):
                 'Client': {
                     'enabled': True,
                     'diamond_fifo': diamond_fifo,
-                    'nagios_fifo': nagios_fifo,
+                    'interval': 2,
                 }
             },
             'backends':
@@ -61,12 +62,11 @@ class ClientTC(TantaleTC):
             pass
         os.mkfifo(diamond_fifo)
 
-        try:
-            os.unlink(nagios_fifo)
-        except:
-            pass
-        os.mkfifo(nagios_fifo)
+    def tearDown(self):
+        os.unlink(diamond_fifo)
+        super(ClientTC, self).tearDown()
 
+    """
     def test_Diamond(self):
         self.start()
 
@@ -91,37 +91,25 @@ class ClientTC(TantaleTC):
             res[0][-3], "Value 103819173888.000000 (10.0, 20.0, None, None)")
 
         self.stop()
+    """
 
-    def test_Nagios(self):
+    def test_External(self):
         self.start()
 
-        fd = os.open(nagios_fifo, os.O_WRONLY | os.O_NONBLOCK)
-        os.write(
-            fd,
-            bytes(
-                "[%d] PROCESS_SERVICE_CHECK_RESULT;%s;%s;%d;%s\n" %
-                (int(time.time()), "fqdn.domain", "Host", 0, "test_output")))
-        # Empty output + users
-        os.write(
-            fd,
-            bytes(
-                "[%d] PROCESS_SERVICE_CHECK_RESULT;%s;%s;%d;%s\n" %
-                (int(time.time()), "fqdn2.domain", "Host", 0, "")))
-        os.close(fd)
-
         # Check result from livestatus
         live_s = self.getSocket('Livestatus')
+        fqdn = socket.getfqdn()
         for nb in range(10):
             time.sleep(1)
             live_s.send(
-                self.getLivestatusRequest('get_host') % ("fqdn.domain"))
+                self.getLivestatusRequest('get_host') % (fqdn))
             res = live_s.recv()
             res = eval(res[16:])
             if len(res) > 0:
                 break
 
-        self.assertEqual(res[0][-3], "fqdn.domain")
-        self.assertEqual(res[0][4], "test_output")
+        self.assertEqual(res[0][-3], fqdn)
+        self.assertEqual(res[0][4], "Ok check")
         self.assertEqual(res[0][13], 0)
 
         # Check result from livestatus
@@ -129,14 +117,15 @@ class ClientTC(TantaleTC):
         for nb in range(10):
             time.sleep(1)
             live_s.send(
-                self.getLivestatusRequest('get_host') % ("fqdn2.domain"))
+                self.getLivestatusRequest(
+                    'get_service') % (fqdn, "external_example"))
             res = live_s.recv()
             res = eval(res[16:])
             if len(res) > 0:
                 break
 
-        self.assertEqual(res[0][-3], "fqdn2.domain")
-        self.assertEqual(res[0][4], "")
-        self.assertEqual(res[0][13], 0)
+        self.assertEqual(res[0][3], fqdn, res)
+        self.assertEqual(res[0][4], 'fail', res)
+        self.assertEqual(res[0][-1], 1, res)
 
         self.stop()
