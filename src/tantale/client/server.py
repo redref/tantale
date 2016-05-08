@@ -127,6 +127,9 @@ class Client(object):
         self.checks = {}
         for key in self.config:
             if isinstance(self.config[key], dict):
+                # If name specified, overwrite dict name
+                name = self.config[key].get('name', key)
+
                 check = self.config[key]
                 check_type = check.get('type', None)
                 hostname = check.get('hostname', default_host)
@@ -141,6 +144,7 @@ class Client(object):
                     # Pre-provision results
                     if check_type == "ok":
                         self.results[key] = {
+                            "check": name,
                             "timestamp": int(time.time()),
                             "hostname": hostname,
                             "status": 0,
@@ -149,6 +153,7 @@ class Client(object):
                     else:
                         # Send Ok default result
                         self.results[key] = {
+                            "check": name,
                             "timestamp": int(time.time()),
                             "hostname": hostname,
                             "status": 3,

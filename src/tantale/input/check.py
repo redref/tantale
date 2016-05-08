@@ -25,8 +25,8 @@ class Check(object):
     log_fields = [
         'last_check', 'hostname', 'check', 'status', 'output']
 
-    def __init__(self, check, timestamp=None, hostname=None,
-                 status=None, output=None, contacts=None, **tags):
+    def __init__(self, key, timestamp=None, hostname=None,
+                 status=None, output=None, contacts=None, check=None, **tags):
         """
         Create new instance
         """
@@ -34,8 +34,11 @@ class Check(object):
         self.parsing_ts = time.time()
         self.timestamp = int(timestamp)
         self.contacts = contacts
-
         self.hostname = hostname
+
+        if check is None:
+            check = key
+
         if check == 'Host':
             self.type = 'host'
             self.id = hostname

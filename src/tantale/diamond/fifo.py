@@ -1,8 +1,9 @@
 # coding=utf-8
 
 """
-Tantale diamond handler
-Pass metrics to FIFO file
+Send metrics to local [Tantale](https://github.com/redref/tantale) client.
+
+Send metrics as strings to a FIFO file read by tantale client.
 """
 
 from __future__ import print_function

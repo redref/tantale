@@ -50,7 +50,7 @@ class ClientTC(TantaleTC):
             },
             'backends':
                 {'ElasticsearchBackend':
-                    {'batch': 1, 'recreate_index_for_test': True}}
+                    {'recreate_index_for_test': True}}
         }
         # Merge config addins
         self.server.config.merge(configobj.ConfigObj(config))
@@ -63,10 +63,12 @@ class ClientTC(TantaleTC):
         os.mkfifo(diamond_fifo)
 
     def tearDown(self):
-        os.unlink(diamond_fifo)
+        try:
+            os.unlink(diamond_fifo)
+        except:
+            pass
         super(ClientTC, self).tearDown()
 
-    """
     def test_Diamond(self):
         self.start()
 
@@ -81,17 +83,19 @@ class ClientTC(TantaleTC):
             time.sleep(1)
             live_s.send(
                 self.getLivestatusRequest('get_service') %
-                ("fqdn.domain", "root"))
+                ("fqdn.domain", "fs_root"))
             res = live_s.recv()
             res = eval(res[16:])
             if len(res) > 0:
                 break
 
+        self.assertEqual(res[0][3], "fqdn.domain", res)
         self.assertEqual(
-            res[0][-3], "Value 103819173888.000000 (10.0, 20.0, None, None)")
+            res[0][4],
+            "Value 103819173888.000000 (10.0, 20.0, None, None)", res)
+        self.assertEqual(res[0][-1], 0, res)
 
         self.stop()
-    """
 
     def test_External(self):
         self.start()
@@ -99,7 +103,7 @@ class ClientTC(TantaleTC):
         # Check result from livestatus
         live_s = self.getSocket('Livestatus')
         fqdn = socket.getfqdn()
-        for nb in range(10):
+        for nb in range(20):
             time.sleep(1)
             live_s.send(
                 self.getLivestatusRequest('get_host') % (fqdn))

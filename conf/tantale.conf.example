@@ -55,7 +55,8 @@ server_port = 2003
 contacts = user_1, user_2
 
 # Diamond source configuration
-diamond_fifo = /dev/shm/diamond_to_fifo
+#   Input FIFO file path - must match diamond Handler config
+# diamond_fifo = /dev/shm/diamond_to_fifo
 
 # External source configuration
 #   Pre-forked workers number
@@ -63,7 +64,7 @@ diamond_fifo = /dev/shm/diamond_to_fifo
 
 # Checks definition
 
-# Shared config keys
+# All checks config keys
 #   hostname = <local fqdn>
 #     usefull to submit checks for other hosts
 #   interval = 60
@@ -73,6 +74,12 @@ diamond_fifo = /dev/shm/diamond_to_fifo
 [[[Host]]]
 # "ok" report sucessfull at any time
 type = ok
+
+[[[Host-fqdn.domain]]]
+# "ok" report sucessfull at any time
+name = Host
+type = ok
+hostname = fqdn.domain
 
 # Process ('ps') source example
 [[[ps_example]]]
@@ -93,6 +100,8 @@ type = diamond
 # Must match diamond metric prefix
 #   Default : ""
 prefix = servers.domain.my_fqdn
+
+hostname = fqdn.domain
 
 # Math on expression, then check value range (low crit, low warn, up warn, up crit)
 expression = {diskspace.root.byte_free} / {diskspace.root.byte_avail} * 100
