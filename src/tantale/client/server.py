@@ -89,12 +89,12 @@ class Client(object):
         self.close()
 
     def timer_thread(self, event, interval):
-        time.sleep(interval)
-
         while True:
-            time.sleep(interval)
+            event.wait(interval)
             if not event.is_set():
                 event.set()
+            else:
+                time.sleep(1)
 
     def loop_thread(self, event):
         self.connect()

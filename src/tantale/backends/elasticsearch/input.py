@@ -63,6 +63,14 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             })
 
             while True:
+                if self.elasticclient is None:
+                    self.log.debug("ElasticsearchBackend: not connected. "
+                                   "Reconnecting")
+                    self._connect()
+                if self.elasticclient is None:
+                    self.log.info("ElasticsearchBackend: Reconnect failed")
+                    break
+
                 try:
                     # Refresh (before redo request)
                     self.elasticclient.indices.refresh(index=self.status_index)

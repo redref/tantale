@@ -179,11 +179,11 @@ class DiamondSource(object):
         elif lower_warn and float(value) < float(lower_warn):
             return 1, message % ('lower', lower_warn)
 
-        elif upper_warn and float(value) > float(upper_warn):
-            return 1, message % ('upper', upper_warn)
-
         elif upper_crit and float(value) > float(upper_crit):
             return 2, message % ('upper', upper_crit)
+
+        elif upper_warn and float(value) > float(upper_warn):
+            return 1, message % ('upper', upper_warn)
 
         else:
             return 0, "Value %f (%s, %s, %s, %s)" % \

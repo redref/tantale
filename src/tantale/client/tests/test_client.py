@@ -97,6 +97,31 @@ class ClientTC(TantaleTC):
 
         self.stop()
 
+    def test_Ps(self):
+        self.start()
+
+        # Check result from livestatus
+        live_s = self.getSocket('Livestatus')
+        fqdn = socket.getfqdn()
+        for nb in range(10):
+            time.sleep(1)
+            live_s.send(
+                self.getLivestatusRequest('get_service') %
+                (fqdn, "ps_example"))
+            res = live_s.recv()
+            res = eval(res[16:])
+            if len(res) > 0:
+                break
+
+        self.assertEqual(res[0][3], fqdn, res)
+        self.assertEqual(
+            res[0][4],
+            "Found 1 processes matching in[ia]t for user root "
+            "(1, 1, None, None)", res)
+        self.assertEqual(res[0][-1], 0, res)
+
+        self.stop()
+
     def test_External(self):
         self.start()
 

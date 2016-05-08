@@ -67,8 +67,6 @@ contacts = user_1, user_2
 # All checks config keys
 #   hostname = <local fqdn>
 #     usefull to submit checks for other hosts
-#   interval = 60
-#     launch check every X seconds
 
 # Host check - wired to host livestatus object
 [[[Host]]]
@@ -84,14 +82,17 @@ hostname = fqdn.domain
 # Process ('ps') source example
 [[[ps_example]]]
 type = ps
-regexp = 'rsyslog(|d)($| )'
+regexp = 'in[ia]t'
+# user = 'root'
 # Check number of process (low crit, low warn, up warn, up crit)
-thresholds = 1,1,1,1
+thresholds = 1, 1, "", ""
 
 # External commands source example
 [[[external_example]]]
 type = external
 command = /bin/bash -c 'echo fail; exit 1'
+# interval = 60
+#   launch this check every X seconds
 
 # Diamond source example
 [[[fs_root]]]
