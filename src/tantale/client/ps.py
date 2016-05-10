@@ -15,7 +15,7 @@ class PsSource(object):
 
         for check in checks:
             checks[check]['pattern'] = re.compile(checks[check]['regexp'])
-            checks[check]['user'] = checks[check].get('user', 'root')
+            checks[check]['user'] = checks[check].get('user', None)
 
             # Thresholds
             thresholds = checks[check].get('thresholds', None)
@@ -53,7 +53,7 @@ class PsSource(object):
                 command = ' '.join(process.cmdline())
 
                 for check in self.checks:
-                    if user != self.checks[check]['user']:
+                    if user and user != self.checks[check]['user']:
                         continue
 
                     if re.search(self.checks[check]['pattern'], command):

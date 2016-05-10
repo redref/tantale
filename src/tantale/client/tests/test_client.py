@@ -17,22 +17,9 @@ diamond_fifo = os.path.join(my_folder, '.test_diamond_fifo')
 
 diamond_input = """servers.domain.my_fqdn.diskspace.root.byte_percentfree 90.90
 servers.domain.my_fqdn.diskspace.root.byte_used 11017080832.00
-servers.domain.my_fqdn.diskspace.root.byte_free 109989548032.00
+servers.domain.my_fqdn.diskspace.root.byte_free 30989548032.00
 servers.domain.my_fqdn.diskspace.root.byte_avail 103819173888.00
-servers.domain.my_fqdn.diskspace.root.inodes_percentfree 95
-servers.domain.my_fqdn.diskspace.root.inodes_used 340616
-servers.domain.my_fqdn.diskspace.root.inodes_free 7171448
-servers.domain.my_fqdn.diskspace.root.inodes_avail 7171448
-servers.domain.my_fqdn.cpu.total.system 1
-servers.domain.my_fqdn.cpu.total.user 3
-servers.domain.my_fqdn.cpu.total.softirq 0
-servers.domain.my_fqdn.cpu.total.nice 0
-servers.domain.my_fqdn.cpu.total.steal 0
-servers.domain.my_fqdn.cpu.total.iowait 0
-servers.domain.my_fqdn.cpu.total.guest 0
-servers.domain.my_fqdn.cpu.total.guest_nice 0
-servers.domain.my_fqdn.cpu.total.idle 396
-servers.domain.my_fqdn.cpu.total.irq 0"""
+"""
 
 
 class ClientTC(TantaleTC):
@@ -92,7 +79,7 @@ class ClientTC(TantaleTC):
         self.assertEqual(res[0][3], "fqdn.domain", res)
         self.assertEqual(
             res[0][4],
-            "Value 103819173888.000000 (10.0, 20.0, None, None)", res)
+            "29.85 (10.0, 20.0, None, None)", res)
         self.assertEqual(res[0][-1], 0, res)
 
         self.stop()

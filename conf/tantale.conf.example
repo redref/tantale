@@ -82,8 +82,13 @@ hostname = fqdn.domain
 # Process ('ps') source example
 [[[ps_example]]]
 type = ps
+
+# Filter processes by regexp (required)
 regexp = 'in[ia]t'
-# user = 'root'
+
+# Filter processes by user (no filter if not defined)
+user = root
+
 # Check number of process (low crit, low warn, up warn, up crit)
 thresholds = 1, 1, "", ""
 
@@ -91,21 +96,24 @@ thresholds = 1, 1, "", ""
 [[[external_example]]]
 type = external
 command = /bin/bash -c 'echo fail; exit 1'
+
+# Launch this check every X seconds
 # interval = 60
-#   launch this check every X seconds
+
 
 # Diamond source example
 [[[fs_root]]]
 type = diamond
+hostname = fqdn.domain
 
-# Must match diamond metric prefix
+# Prefix added to expression metrics
 #   Default : ""
 prefix = servers.domain.my_fqdn
 
-hostname = fqdn.domain
+# Mathematic expression
+expression = "( {diskspace.root.byte_free} / {diskspace.root.byte_avail} ) * 100"
 
-# Math on expression, then check value range (low crit, low warn, up warn, up crit)
-expression = {diskspace.root.byte_free} / {diskspace.root.byte_avail} * 100
+# Check expression value range (low crit, low warn, up warn, up crit)
 thresholds = 10, 20, "", ""
 
 ################################################################################

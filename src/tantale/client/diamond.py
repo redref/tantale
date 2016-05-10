@@ -158,7 +158,7 @@ class DiamondSource(object):
                     continue
 
                 status, output = self.range_check(
-                    value, **self.checks[check]['thresholds'])
+                    computed, **self.checks[check]['thresholds'])
 
                 yield check, {
                     "status": status,
@@ -171,23 +171,23 @@ class DiamondSource(object):
         lower_crit=None, lower_warn=None, upper_warn=None, upper_crit=None
     ):
         """ Compare with thresholds """
-        message = "Value %f %%s than %%f" % value
+        message = "%.2f (%s, %s, %s, %s)" % (
+            value, lower_crit, lower_warn, upper_warn, upper_crit)
 
         if lower_crit and float(value) < float(lower_crit):
-            return 2, message % ('lower', lower_crit)
+            return 2, message
 
         elif lower_warn and float(value) < float(lower_warn):
-            return 1, message % ('lower', lower_warn)
+            return 1, message
 
         elif upper_crit and float(value) > float(upper_crit):
-            return 2, message % ('upper', upper_crit)
+            return 2, message
 
         elif upper_warn and float(value) > float(upper_warn):
-            return 1, message % ('upper', upper_warn)
+            return 1, message
 
         else:
-            return 0, "Value %f (%s, %s, %s, %s)" % \
-                (value, lower_crit, lower_warn, upper_warn, upper_crit)
+            return 0, message
 
     def create_fifo(self, fifo_path):
         if fifo_path and not os.path.exists(fifo_path):
