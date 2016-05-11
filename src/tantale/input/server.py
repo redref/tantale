@@ -232,14 +232,19 @@ class InputServer(object):
 
         # Logic
         while self.running:
+            self.log.debug('Run update')
+
             start = int(time.time())
+
             for backend in backends:
-                result = backend.freshness_update(
-                    self.freshness_timeout, 2, 'OUTDATED - ')
+                backend.freshness(self.freshness_timeout, 2, 'OUTDATED - ')
 
             exec_time = int(time.time()) - start
-            # wait freshness_timeout / 2
+
+            # If faster then freshness_timeout / 2, sleep a bit
             if exec_time < (self.freshness_timeout / 2):
                 time.sleep(self.freshness_timeout / 2 - exec_time)
+
+            self.log.debug('End update')
 
         self.log.info("Exit")

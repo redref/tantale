@@ -140,7 +140,7 @@ request_timeout = 30
 # Maximum size for batch update
 batch = 1000
 # maximum checks keeped in memory (FIFO) in case backend failing (trim)
-backlog_size = 500
+backlog_size = 2000
 
 ################################################################################
 ### Options for logging

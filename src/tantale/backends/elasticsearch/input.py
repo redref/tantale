@@ -12,6 +12,8 @@ from tantale.backends.elasticsearch.base import ElasticsearchBaseBackend
 from tantale.input.backend import Backend
 from tantale.input.check import Check
 
+from elasticsearch import helpers
+
 
 class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
     def __init__(self, config=None):
@@ -39,12 +41,53 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             if before == len(self.checks):
                 break
 
-    def freshness_update(self, timeout, outdated_status, prefix):
+    def freshness_iterator(self, query, timeout, outdated_status, prefix):
         """
-        Fetch then Update to enforce freshness_timeout
-        timeout : validity time for checks
-        outdated_status : status to be applied on outdated
-        prefix : output prefix to apply on outdated
+        Make a scan query then manipulate hits
+        Yield on all modified hits
+        """
+        for hit in helpers.scan(
+            self.elasticclient,
+            index=self.status_index,
+            size=self.batch_size,
+            query=query,
+            scroll="%ss" % timeout,
+        ):
+            hit['_op_type'] = 'update'
+            hit['doc'] = {}
+
+            # Update status only if OK before
+            if hit['_source']['status'] == 0:
+                hit['doc']['status'] = outdated_status
+            else:
+                hit['doc']['status'] = hit['_source']['status']
+
+            hit['doc']['timestamp'] = int(time.time()) * 1000
+
+            hit['doc']['output'] = prefix + hit['_source']['output']
+
+            # Build a log entry
+            log = {}
+            for field in Check.log_fields:
+                if field in ('timestamp', 'status', 'output'):
+                    log[field] = hit['doc'][field]
+                else:
+                    log[field] = hit['_source'][field]
+
+            del hit['_source']
+
+            yield hit
+
+            # Update OK
+            # Forward update to _send_to_logs
+            self.logs.append(log)
+
+    def freshness(self, timeout, outdated_status, prefix):
+        """
+        Get scroll on outdated, then bulk update it with values
+            timeout : validity time for checks
+            outdated_status : status to be applied on outdated
+            prefix : output prefix to apply on outdated
         """
         try:
             min_ts = (int(time.time()) - timeout) * 1000
@@ -61,113 +104,36 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     {"not": {"prefix": {"output": prefix}}},
                 ]}
             })
+        except:
+            self.log.error(
+                'ElasticsearchBackend: failed to build freshness request')
+            self.log.debug("Trace:\n%s" % traceback.format_exc())
+            return
 
-            while True:
-                if self.elasticclient is None:
-                    self.log.debug("ElasticsearchBackend: not connected. "
-                                   "Reconnecting")
-                    self._connect()
-                if self.elasticclient is None:
-                    self.log.info("ElasticsearchBackend: Reconnect failed")
-                    break
+        if self.elasticclient is None:
+            self.log.debug("ElasticsearchBackend: not connected. "
+                           "Reconnecting")
+            self._connect()
+        if self.elasticclient is None:
+            self.log.info("ElasticsearchBackend: Reconnect failed")
+            return
 
-                try:
-                    # Refresh (before redo request)
-                    self.elasticclient.indices.refresh(index=self.status_index)
-
-                    # GET
-                    result = self.elasticclient.search(
-                        index=self.status_index, body=search_body)
-
-                    if 'hits' not in result:
-                        raise Exception("No hits")
-                except Exception as e:
-                    self.log.debug(
-                        "ElasticsearchBackend: failed to get outdated"
-                        "%s" % e)
-                    break
-
-                if result['hits']['total'] == 0:
-                    # Normal end here
-                    break
-
-                # Generate bulk update
-                body = ""
-                for hit in result['hits']['hits']:
-                    # Change status to 1 and output prefix
-                    changed = None
-                    if hit['_source']['status'] == 0:
-                        status = outdated_status
-                        changed = True
-                    else:
-                        status = hit['_source']['status']
-                    if not hit['_source']['output'].startswith(prefix):
-                        changed = False
-                        output = "%s%s" % (prefix, hit['_source']['output'])
-                    else:
-                        output = hit['_source']['output']
-
-                    # If changed, construct request
-                    if changed is not None:
-                        # Metadata for an update
-                        metadata = {"update": {
-                            "_index": self.status_index,
-                            "_version": hit['_version'],
-                            "_id": hit['_id'],
-                            "_type": hit['_type'],
-                        }}
-                        if '_parent' in hit:
-                            metadata['update']['_parent'] = hit['_parent']
-                        body += json.dumps(metadata)
-                        body += "\n"
-
-                        # Update fields (and retrieve doc)
-                        body += json.dumps({
-                            "refresh": True, "fields": Check.log_fields,
-                            "doc": {
-                                "output": output,
-                                "status": status,
-                                "last_check": int(time.time()) * 1000}})
-                        body += "\n"
-
-                # Do bulk
-                if body != "":
-                    bulk_result = self.elasticclient.bulk(body=body)
-
-                    if not bulk_result or 'items' not in bulk_result:
-                        raise Exception(bulk_result)
-
-                    for item in bulk_result['items']:
-                        # Log errors
-                        if 'error' in item["update"]:
-                            self.log.debug(
-                                "ElasticsearchBackend: failed to update "
-                                "outdated with error %s" % bulk_result)
-                        # Forward update to _send_to_logs
-                        try:
-                            fields = item['update']['get']['fields']
-                            log = {}
-                            for field in fields:
-                                if field == 'last_check':
-                                    log['timestamp'] = fields['last_check'][0]
-                                else:
-                                    log[field] = fields[field][0]
-                            self.logs.append(log)
-                        except:
-                            self.log.warn(
-                                "ElasticsearchBackend: log_outdated error")
-                            self.log.debug(
-                                "Trace :\n%s" % traceback.format_exc())
-
-                    if changed:
-                        self._send_to_logs()
-
+        try:
+            for res in helpers.streaming_bulk(
+                self.elasticclient,
+                self.freshness_iterator(
+                    search_body, timeout, outdated_status, prefix),
+                chunk_size=self.batch_size,
+            ):
+                pass
         except SystemExit:
             # Handle process exit
             raise
         except:
             self.log.info("ElasticsearchBackend: failed to update outdated")
             self.log.debug("Trace:\n%s" % traceback.format_exc())
+
+        self._send_to_logs()
 
     def _send_to_status(self):
         """

@@ -23,7 +23,7 @@ class Check(object):
         'contacts']
     # Relevant attributes (backend logs POV)
     log_fields = [
-        'last_check', 'hostname', 'check', 'status', 'output']
+        'timestamp', 'hostname', 'check', 'status', 'output']
 
     def __init__(self, key, timestamp=None, hostname=None,
                  status=None, output=None, contacts=None, check=None, **tags):
