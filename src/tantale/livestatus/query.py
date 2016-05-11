@@ -253,7 +253,7 @@ class Query(object):
         # Debug : print first line of results
         if len(self.results) == 1:
             self.log.debug(
-                'Tantale result (first line):\n%s', str(self.results))
+                'Tantale result (first line): %s', str(self.results))
 
         # Handle line by line printing
         if self.oformat == 'csv' and not self.rheader:
@@ -267,7 +267,6 @@ class Query(object):
         """ Dump results to network """
         if self.rheader == 'fixed16':
             string = str(self.results)
-            # print('%3d %11d %s\n' % (200, len(string) + 1, string))
             self.output_sock.send(
                 bytes('%3d %11d %s\n' % (200, len(string) + 1, string)))
         else:
@@ -384,10 +383,11 @@ class Query(object):
         options = {}
 
         log = logging.getLogger('tantale.livestatus')
-        log.debug("Livestatus query :\n%s" % string)
 
         try:
             for line in string.split('\n'):
+                log.debug("Livestatus query : %s" % line)
+
                 members = line.split(' ')
                 # Empty line
                 if members[0] == '':

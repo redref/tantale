@@ -160,14 +160,15 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 body += json.dumps(es_meta) + "\n"
                 stat_query = copy.deepcopy(es_query)
                 stat_query['filter']['and'].append(self.convert_expr(*stat))
+                self.log.debug(
+                    'Elasticsearch search request : %s' % stat_query)
                 body += json.dumps(stat_query) + "\n"
-            self.log.debug('Elasticsearch requests :\n%s' % body)
 
             result = []
             for response in self.elasticclient.msearch(body=body)['responses']:
                 if 'error' in response:
                     self.log.debug(
-                        'Elasticsearch error response:\n%s' % response)
+                        'Elasticsearch error response: %s' % response)
                 else:
                     result.append(response['hits']['total'])
             count = 1
@@ -180,16 +181,17 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             if query.limit:
                 es_query['size'] = query.limit
 
+            self.log.debug('Elasticsearch count request : %s' % es_query)
+
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"
-            self.log.debug('Elasticsearch requests :\n%s' % body)
 
             response = self.elasticclient.msearch(body=body)['responses'][0]
 
             if 'error' in response:
                 # No index or empty query
                 self.log.debug(
-                    'Elasticsearch error response:\n%s' % response)
+                    'Elasticsearch error response: %s' % response)
                 return 0
 
             count = response['hits']['total']
@@ -260,6 +262,6 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         if el_type == 'service':
             kwargs['parent'] = did.split('-')[0]
 
-        self.log.debug('Elasticsearch update request :\n%s' % str(kwargs))
+        self.log.debug('Elasticsearch update request : %s' % str(kwargs))
         response = self.elasticclient.update(**kwargs)
-        # self.log.debug('Elasticsearch response :\n%s' % response)
+        # self.log.debug('Elasticsearch update response :\n%s' % response)
