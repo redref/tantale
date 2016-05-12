@@ -46,6 +46,9 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         Make a scan query then manipulate hits
         Yield on all modified hits
         """
+        self.elasticclient.indices.refresh(
+            index=self.status_index, ignore_unavailable=True)
+
         for hit in helpers.scan(
             self.elasticclient,
             index=self.status_index,
@@ -135,76 +138,88 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         self._send_to_logs()
 
-    def _send_to_status(self):
+    def status_iterator(self):
         """
-        Send batch_size checks to status index
+        Iterate over input checks, yielding to update it
         """
-        body = ""
-        sources = []
-        while len(sources) <= self.batch_size:
+        body = []
+        checks = []
+        while len(body) <= self.batch_size:
             if len(self.checks) == 0:
                 break
 
             check = self.checks.pop(0)
 
-            # Request metadata
-            es_meta = {"_type": check.type, "_id": check.id}
+            metadata = {"_type": check.type, "_id": check.id}
             if check.type == 'service':
-                es_meta['parent'] = check.hostname
-            body += json.dumps({"update": es_meta})
-            body += "\n"
+                metadata['_parent'] = check.hostname
 
-            # Request document
-            obj = {}
-            for slot in check.fields:
-                obj[slot] = getattr(check, slot, None)
+            body.append(metadata)
+            checks.append(check)
 
-            # Timestamp in milliseconds
-            obj['timestamp'] = obj['timestamp'] * 1000
+        # Get previous status and ack to make decisions
+        self.elasticclient.indices.refresh(
+            index=self.status_index, ignore_unavailable=True)
 
-            # Call tantale groovy script (maintain statuses)
-            sources.append(obj)
-            body += json.dumps({
-                "fields": ["timestamp"], 'upsert': obj,
-                "script": {"file": "tantale", "params": obj}})
-            body += "\n"
+        res = self.elasticclient.mget(
+            body=json.dumps({"docs": body}),
+            index=self.status_index,
+            _source_include=('status', 'ack'),
+            refresh=True,
+        )
 
-        # Do it and handle
-        if body != "":
-            res = self.elasticclient.bulk(body=body, index=self.status_index)
-            if res:
-                # Handle errors
-                if 'errors' in res and res['errors'] != 0:
-                    status = False
+        for doc in res['docs']:
+            check = checks.pop(0)
 
-                    # On errors, search errored items, log it, drop it
-                    idx = 0
-                    while len(res['items']) > idx:
-                        item = res['items'][idx]
-                        if 'error' in item['update']:
-                            self.log.debug(
-                                "ElasticsearchBackend: send error - %s" % item)
-                            self.log.debug(
-                                "ElasticsearchBackend: send error source - "
-                                "%s" % sources[idx])
-                            res['items'].pop(idx)
-                        else:
-                            idx += 1
+            if 'found' in doc and doc['found'] is True:
+                doc['doc'] = {}
+                doc['_op_type'] = 'update'
+                doc['doc']['output'] = check.output
+                doc['doc']['contacts'] = check.contacts
 
-                    self.log.warn("ElasticsearchBackend: send error found")
+                if check.status != doc['_source']['status']:
+                    doc['doc']['status'] = check.status
+                    doc['doc']['timestamp'] = check.timestamp
 
-                # Construct logs list (if timestamp changed)
-                if 'items' in res:
-                    for idx, item in enumerate(res['items']):
-                        try:
-                            ts = item['update']['get']['fields']['timestamp']
-                            if sources[idx]['timestamp'] <= ts[0]:
-                                self.logs.append(sources[idx])
-                        except:
-                            self.log.warn(
-                                "ElasticsearchBackend: send_res parse error")
-                            self.log.debug(
-                                "Trace :\n%s" % traceback.format_exc())
+                    # Add a log entry of this change (no ack / last_check)
+                    self.logs.append(doc['doc'])
+
+                    doc['doc']['ack'] = 0
+
+                del doc['_source']
+                del doc['_version']
+                doc['doc']['last_check'] = check.timestamp * 1000
+
+            else:
+                doc['_source'] = {}
+                doc['_op_type'] = 'create'
+
+                if check.type == 'service':
+                    doc['_parent'] = check.hostname
+
+                for slot in check.fields:
+                    if slot == "timestamp":
+                        doc['_source'][slot] = getattr(
+                            check, slot, None) * 1000
+                    else:
+                        doc['_source'][slot] = getattr(check, slot, None)
+
+            yield doc
+
+    def _send_to_status(self):
+        """
+        Send batch_size checks to status index
+        """
+        for res in helpers.streaming_bulk(
+            self.elasticclient,
+            self.status_iterator(),
+            chunk_size=self.batch_size,
+        ):
+            # Errors are already raised by bulk
+            pass
+
+        # Trigger logs update
+        self._send_to_logs()
 
     def _send_to_logs(self):
         body = ""

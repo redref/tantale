@@ -7,10 +7,6 @@ Require python Elastic client 'elasticsearch' (Pypi)
 
 ### Setup
 
-Elasticsearch scripts (must be deployed manually on all nodes) :
-
-  * UPDATE SCRIPT : tantale.groovy
-
 Elasticsearch templates (will be pushed by tantale) :
 
   * STATUS INDEX : status.template
@@ -20,8 +16,7 @@ Elasticsearch templates (will be pushed by tantale) :
 ### Description
 
 Post check to "status" index with id unicity (<hostname>-<check_name>)
-using "update/upsert" API, script "tantale.groovy" manage
-acknowledge and timestamp (last_change) and last_check values.
+using "update/create" API
 
 """
 
