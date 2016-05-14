@@ -29,6 +29,9 @@ class ClientTC(TantaleTC):
         # Daemon config
         config = {
             'modules': {
+                'Input': {
+                    'ttl': 1,
+                },
                 'Client': {
                     'enabled': True,
                     'diamond_fifo': diamond_fifo,

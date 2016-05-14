@@ -123,12 +123,6 @@ class ElasticsearchTC(TantaleTC):
         res = eval(res[16:])
         self.assertEqual(len(res), 1, "AuthUser filter failed")
 
-        # Get logs / check order
-        live_s.send("%s\n" % self.getLivestatusRequest('get_logs'))
-        res = live_s.recv()
-        res = eval(res[16:])
-        self.assertTrue(len(res) > 0, "Logs empty")
-
         # Check downtimes logic on host
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_1')
         for nb in range(5):
@@ -186,7 +180,7 @@ class ElasticsearchTC(TantaleTC):
 
         live_s = self.getSocket('Livestatus')
 
-        # Hosts stats (wait every input done)
+        # Hosts stats (wait every input done) - all host NOK
         regexp = r'200\s+\d+ \[\[\d+, ' + str(hosts_nb) + ', \d+\]\]\n'
         tries = 0
         while True:
@@ -200,6 +194,12 @@ class ElasticsearchTC(TantaleTC):
                 break
         self.assertRegexpMatches(
             res, regexp, "Input longer than 10s, quitting")
+
+        # Get logs - on freshness update
+        live_s.send("%s\n" % self.getLivestatusRequest('get_logs'))
+        res = live_s.recv()
+        res = eval(res[16:])
+        self.assertTrue(len(res) > 0, "Logs empty")
 
         stop = time.time()
         if self.bench:
