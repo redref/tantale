@@ -24,5 +24,24 @@ class Backend(BaseBackend):
             if self.lock.locked():
                 self.lock.release()
 
-    def query(self, query, limit=None):
+    def query(self, query):
+        raise NotImplementedError
+
+    def _command(self, command):
+        """
+        Decorator for processing with a lock, catching exceptions
+        """
+        if not self.enabled:
+            return
+        try:
+            try:
+                self.lock.acquire()
+                return self.command(command)
+            except Exception:
+                self.log.error(traceback.format_exc())
+        finally:
+            if self.lock.locked():
+                self.lock.release()
+
+    def command(self, command):
         raise NotImplementedError

@@ -13,7 +13,7 @@ import socket
 from threading import Thread, Event
 
 from tantale.utils import load_backend
-from tantale.livestatus.query import Query
+from tantale.livestatus.parser import Parser
 
 try:
     from setproctitle import setproctitle, getproctitle
@@ -34,15 +34,21 @@ class LivestatusServer(object):
 
         # Initialize Members
         self.config = config
+        self.parser = Parser()
 
         # Load backends
         self.backends = []
 
     def handle_livestatus_query(self, sock, request):
-        queryobj = Query.parse(sock, request)
-        queryobj._query(self.backends)
-        queryobj._flush()
-        return queryobj.keepalive
+        keepalive, queryobj = self.parser.parse(request)
+
+        # Give response socket to the query
+        if hasattr(queryobj, 'output_sock'):
+            queryobj.output_sock = sock
+
+        queryobj.execute(self.backends)
+
+        return keepalive
 
     def handle_client(self, client_socket):
         run = True

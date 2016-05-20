@@ -16,19 +16,19 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         self.log = logging.getLogger('tantale.livestatus')
         super(ElasticsearchBackend, self).__init__(config)
 
-    def convert_expr(self, field, operator, value=None):
+    def _convert_expr(self, field, operator, value=None):
         """ Convert tantale expression to elasticsearch filter """
         # Handle booleans (and/or/not)
         if value is None:
             if field in ('and', 'or'):
                 l = []
                 for expr in operator:
-                    l.append(self.convert_expr(*expr))
+                    l.append(self._convert_expr(*expr))
                 return {field: l}
             if field in ('not',):
                 # Elasticsearch does not support NAND / NOR
                 # Convert it to OR (NOT) and AND (NOT)
-                expr = self.convert_expr(*operator[0])
+                expr = self._convert_expr(*operator[0])
                 if 'and' in expr or 'or' in expr:
                     if 'and' in expr:
                         old = 'and'
@@ -41,7 +41,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                         filt[new].append({"not": nest_filt})
                     return filt
                 else:
-                    return {field: self.convert_expr(*operator[0])}
+                    return {field: self._convert_expr(*operator[0])}
             else:
                 raise Exception('Unknown boolean operator %s' % field)
 
@@ -101,6 +101,87 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
         return filt
 
+    def command(self, command):
+        if command.function == 'acknowledge':
+            if command.action == 'add':
+                value = 1
+            else:
+                value = None
+
+            self._update_query(
+                body=json.dumps({"doc": {"ack": value}}),
+                doc_type=command.type,
+                id=command.doc_id,
+                parent=command.parent
+            )
+
+        elif command.function == 'downtime':
+            query = {'doc': {}}
+
+            if command.action == 'add':
+                # Generate unique id
+                res = self.elasticclient.search(
+                    index=self.status_index, size=0,
+                    body=json.dumps({
+                        "aggs": {"uid": {"max": {"field": "downtime_id"}}}
+                    })
+                )
+                uid = res['aggregations']['uid']['value']
+
+                if uid:
+                    uid = int(uid) + 1
+                else:
+                    uid = 1
+
+                query['doc']['downtime_id'] = uid
+                query['doc']['downtime'] = 1
+
+            else:
+                # Get document by downtime_id
+                id_search = {
+                    'filter': {'term': {'downtime_id': command.doc_id}}}
+                kwargs = {
+                    'index': self.status_index,
+                    'size': 1,
+                    'body': json.dumps(id_search),
+                }
+                res = self.elasticclient.search(
+                    index=self.status_index,
+                    body=json.dumps({
+                        'filter': {'term': {'downtime_id': command.doc_id}}})
+                )
+
+                if len(res['hits']['hits']) <= 0:
+                    return
+
+                command.doc_id = res['hits']['hits'][0]['_id']
+                command.type = res['hits']['hits'][0]['_type']
+                if '_parent' in res['hits']['hits'][0]:
+                    command.parent = res['hits']['hits'][0]['_parent']
+
+                query['doc']['downtime_id'] = None
+                query['doc']['downtime'] = None
+
+            self._update_query(
+                body=json.dumps(query),
+                doc_type=command.type,
+                id=command.doc_id,
+                parent=command.parent
+            )
+
+        elif command.function == 'drop':
+            pass
+
+    def _update_query(self, **kwargs):
+        self.log.debug('Elasticsearch update request : %s' % str(kwargs))
+
+        if 'parent' in kwargs and kwargs['parent'] is None:
+            del kwargs['parent']
+
+        response = self.elasticclient.update(index=self.status_index, **kwargs)
+
+        self.log.debug('Elasticsearch update response : %s' % response)
+
     def query(self, query):
         """
         Process a query
@@ -113,9 +194,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             self.log.info("ElasticsearchBackend: Reconnect failed")
             return 0
 
-        if query.method in ('ack', 'downtime'):
-            self.update_query(query)
-        elif query.table == 'downtimes':
+        if query.table == 'downtimes':
             return self.status_query(query, None)
         elif query.table == 'services':
             return self.status_query(query, 'service')
@@ -148,7 +227,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         if query.filters:
             es_query = {'filter': {'and': []}}
             for filt in query.filters:
-                es_query['filter']['and'].append(self.convert_expr(*filt))
+                es_query['filter']['and'].append(self._convert_expr(*filt))
 
         # Stats / COUNT query
         if query.stats:
@@ -159,7 +238,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             for stat in query.stats:
                 body += json.dumps(es_meta) + "\n"
                 stat_query = copy.deepcopy(es_query)
-                stat_query['filter']['and'].append(self.convert_expr(*stat))
+                stat_query['filter']['and'].append(self._convert_expr(*stat))
                 self.log.debug(
                     'Elasticsearch search request : %s' % stat_query)
                 body += json.dumps(stat_query) + "\n"
@@ -202,66 +281,3 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 query.append(line)
 
         return count
-
-    def update_query(self, query):
-        # Parse set/unset bool
-        value = int(query.columns[0])
-        if value == 0:
-            value = None
-        # Document id
-        did = "-".join(query.columns[1:])
-        # Type
-        el_type = query.table
-
-        # Update to do
-        command = {"doc": {query.method: value}}
-
-        # Downtime creation need an unique id
-        if query.method == "downtime":
-            if value == 1:
-                # Generate unique id
-                id_search = {
-                    "aggs": {"uid": {"max": {"field": "downtime_id"}}}}
-                kwargs = {
-                    'index': self.status_index,
-                    'size': 0,
-                    'body': json.dumps(id_search),
-                }
-                res = self.elasticclient.search(**kwargs)
-                # print(res)
-                uid = res['aggregations']['uid']['value']
-                if uid:
-                    uid = int(uid) + 1
-                else:
-                    uid = 1
-                command['doc']['downtime_id'] = uid
-            else:
-                # Get ID by downtime id
-                id_search = {'filter': {'term': {'downtime_id': did}}}
-                kwargs = {
-                    'index': self.status_index,
-                    'size': 1,
-                    'body': json.dumps(id_search),
-                }
-                res = self.elasticclient.search(**kwargs)
-                # print(res)
-                if len(res['hits']['hits']) > 0:
-                    did = res['hits']['hits'][0]['_id']
-                    el_type = res['hits']['hits'][0]['_type']
-                    command['doc']['downtime_id'] = None
-                else:
-                    return
-
-        # Update
-        kwargs = {
-            'index': self.status_index,
-            'body': json.dumps(command),
-            'doc_type': el_type,
-            'id': did,
-        }
-        if el_type == 'service':
-            kwargs['parent'] = did.split('-')[0]
-
-        self.log.debug('Elasticsearch update request : %s' % str(kwargs))
-        response = self.elasticclient.update(**kwargs)
-        # self.log.debug('Elasticsearch update response :\n%s' % response)
