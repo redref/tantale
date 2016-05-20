@@ -136,6 +136,11 @@ class Query(object):
                     mapped_res.append(0)
                     continue
 
+                # Host state from a service log
+                elif self.table == 'downtimes' and req_field == "host_state":
+                    mapped_res.append(0)
+                    continue
+
                 elif field in result:
                     map_name = field
                 elif field in FIELDS_MAPPING:
@@ -153,12 +158,13 @@ class Query(object):
                     continue
 
                 # log table specific
-                elif self.table == 'log' and field == 'type':
-                    if result['check'] == 'Host':
-                        mapped_res.append('HOST ALERT')
-                    else:
-                        mapped_res.append('SERVICE ALERT')
-                    continue
+                elif self.table == 'log':
+                    if field == 'type':
+                        if result['check'] == 'Host':
+                            mapped_res.append('HOST ALERT')
+                        else:
+                            mapped_res.append('SERVICE ALERT')
+                        continue
 
                 # Append
                 if map_name:
@@ -177,6 +183,7 @@ class Query(object):
                         if map_name in ('timestamp', 'last_check'):
                             # TOFIX : this is part of elasticsearch
                             res = int(res / 1000)
+
                     mapped_res.append(res)
                 else:
                     mapped_res.append('')

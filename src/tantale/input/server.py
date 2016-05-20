@@ -230,6 +230,9 @@ class InputServer(object):
             self.log.critical('No available backends')
             return
 
+        # Grace time of one timeout
+        time.sleep(self.freshness_timeout)
+
         # Logic
         while self.running:
             self.log.debug('Run update')

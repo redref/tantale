@@ -114,7 +114,7 @@ class Parser(object):
                 kwargs['action'] = 'add'
 
             # parse function
-            if command[2] == 'PASSIVE':
+            if command[1] == 'PASSIVE':
                 kwargs['function'] = 'drop'
 
             elif command[2] == 'DOWNTIME':

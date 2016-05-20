@@ -179,7 +179,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
 
                 if check.status != doc['_source']['status']:
                     doc['doc']['status'] = check.status
-                    doc['doc']['timestamp'] = check.timestamp
+                    doc['doc']['timestamp'] = check.timestamp * 1000
 
                     # Add a log entry of this change (no ack / last_check)
                     self.logs.append(doc['doc'])

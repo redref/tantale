@@ -170,13 +170,27 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             )
 
         elif command.function == 'drop':
-            pass
+            self._delete_query(
+                doc_type=command.type,
+                id=command.doc_id,
+                parent=command.parent
+            )
 
-    def _update_query(self, **kwargs):
-        self.log.debug('Elasticsearch update request : %s' % str(kwargs))
-
+    def _delete_query(self, **kwargs):
         if 'parent' in kwargs and kwargs['parent'] is None:
             del kwargs['parent']
+
+        self.log.debug('Elasticsearch delete request : %s' % str(kwargs))
+
+        response = self.elasticclient.delete(index=self.status_index, **kwargs)
+
+        self.log.debug('Elasticsearch delete response : %s' % response)
+
+    def _update_query(self, **kwargs):
+        if 'parent' in kwargs and kwargs['parent'] is None:
+            del kwargs['parent']
+
+        self.log.debug('Elasticsearch update request : %s' % str(kwargs))
 
         response = self.elasticclient.update(index=self.status_index, **kwargs)
 

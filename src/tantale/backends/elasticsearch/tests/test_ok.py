@@ -155,7 +155,7 @@ class ElasticsearchTC(TantaleTC):
 
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_1')
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_2')
-        time.sleep(1)
+        time.sleep(2)
 
         live_s.send(self.getLivestatusRequest('get_downtimes'))
         downs = live_s.recv()
