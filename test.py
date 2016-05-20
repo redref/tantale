@@ -222,7 +222,8 @@ if __name__ == "__main__":
                       "--test",
                       dest="test",
                       default="",
-                      help="Run a single test class (by ClassName")
+                      help="Run a single test class "
+                      "(by ClassName or MethodName)")
 
     # Parse Command Line Args
     (options, args) = parser.parse_args()
@@ -248,10 +249,14 @@ if __name__ == "__main__":
         if options.bench:
             test.bench = True
 
-        # Keep only selected test
-        if options.test and test.__name__ != options.test:
-            continue
-        loaded_tests.append(loader.loadTestsFromTestCase(test))
+        # Filter tests with options
+        if not options.test or test.__name__ == options.test:
+            loaded_tests.append(loader.loadTestsFromTestCase(test))
+
+        elif options.test and hasattr(test, options.test):
+            loaded_tests.append(loader.loadTestsFromName(
+                "%s.%s" % (test.__name__, options.test),
+                module=sys.modules[test.__module__]))
 
     # Run tests
     suite = unittest.TestSuite(loaded_tests)

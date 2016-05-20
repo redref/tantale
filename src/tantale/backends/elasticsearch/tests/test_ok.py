@@ -13,6 +13,9 @@ from test import TantaleTC
 
 class ElasticsearchTC(TantaleTC):
     def randStatus(self, seed):
+        """
+        Provide some failed examples to play with
+        """
         if seed == 0:
             # 0 has status warning
             return 1
@@ -25,8 +28,10 @@ class ElasticsearchTC(TantaleTC):
         else:
             return 0
 
-    def push_checks(self, hosts_nb, services_per_host, delay=0):
-        """ Simulate X Hosts pushing hash """
+    def push_checks(self, hosts_nb, services_per_host, delay=60):
+        """
+        Simulate X Hosts pushing hash
+        """
         for host in range(hosts_nb):
 
             input_s = self.getSocket('Input')
@@ -54,6 +59,9 @@ class ElasticsearchTC(TantaleTC):
             input_s.close()
 
     def test_Status(self):
+        """
+        Test status API
+        """
         self.start()
         live_s = self.getSocket('Livestatus')
 
@@ -66,20 +74,28 @@ class ElasticsearchTC(TantaleTC):
         live_s.close()
         self.stop()
 
-    def test_Workflow(self):
-        config = {'backends': {
-            'ElasticsearchBackend': {'recreate_index_for_test': True}
-        }}
-        if self.bench:
+    def InputAndDisplay(self, bench=False, add_config=None):
+        """
+        Push some checks, then check they got stored
+        """
+        if bench:
             hosts_nb = 2000
             services_per_host = 3
         else:
-
             hosts_nb = 10
             services_per_host = 3
 
+        config = {
+            'modules': {'Input': {'ttl': 1}},
+            'backends': {
+                'ElasticsearchBackend': {'recreate_index_for_test': True}
+            }
+        }
+
         # Merge config addins and start
         self.server.config.merge(configobj.ConfigObj(config))
+        if add_config:
+            self.server.config.merge(configobj.ConfigObj(add_config))
         self.start()
 
         # Input (create)
@@ -88,52 +104,78 @@ class ElasticsearchTC(TantaleTC):
 
         live_s = self.getSocket('Livestatus')
 
-        # Hosts stats (wait every input done)
+        # Hosts stats (loop till everything done)
         regexp = r'200\s+\d+ \[\[' + str(hosts_nb) + ', \d+, \d+\]\]\n'
-        tries = 0
-        while True:
-            time.sleep(1)
-            tries += 1
-            if tries > 10:
-                break
+        for nb in range(20):
+            time.sleep(0.5)
             live_s.send(self.getLivestatusRequest('hosts_stats'))
             res = live_s.recv()
             if re.search(regexp, res):
                 break
+
+        stop = time.time()
+
         self.assertRegexpMatches(
             res, regexp, "Input longer than 10s, quitting")
 
-        stop = time.time()
-        if self.bench:
+        if bench:
             print("")
             print(
                 "Created %d checks in %f seconds." %
                 ((hosts_nb * (services_per_host + 1)), (stop - start)))
 
-        # Check limit enforced on hosts
+    def test_InputAndDisplay(self):
+        """
+        Wrapper to get bench on this test
+        """
+        self.InputAndDisplay(self.bench)
+
+    def test_LivestatusLimit(self):
+        self.InputAndDisplay()
+
+        live_s = self.getSocket('Livestatus')
         live_s.send(self.getLivestatusRequest('get_hosts_limit_1'))
         res = live_s.recv()
         res = eval(res[16:])
         self.assertEqual(len(res), 1, "Check limit failed")
 
-        # Check user filter against hosts
+    def test_LivestatusAuthUser(self):
+        self.InputAndDisplay()
+
+        live_s = self.getSocket('Livestatus')
         live_s.send(
             self.getLivestatusRequest('get_hosts_filtered_by_user') % "user_2")
         res = live_s.recv()
         res = eval(res[16:])
         self.assertEqual(len(res), 1, "AuthUser filter failed")
 
-        # Check downtimes logic on host
+    def test_LivestatusCommandKeepalive(self):
+        self.InputAndDisplay()
+        live_s = self.getSocket('Livestatus')
+
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_1')
-        for nb in range(5):
-            time.sleep(1)
-            live_s.send(self.getLivestatusRequest('get_downtimes'))
-            res = live_s.recv()
-            res = eval(res[16:])
-            if len(res) > 0:
-                break
-        self.assertEqual(len(res), 1, "Downtime push failed")
-        self.assertEqual(res[0][-5], 'host_1', "Downtime push incorrect")
+        live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_2')
+        time.sleep(1)
+
+        live_s.send(self.getLivestatusRequest('get_downtimes'))
+        downs = live_s.recv()
+        downs = eval(downs[16:])
+        self.assertEqual(len(downs), 2, "Downtime push failed")
+
+    def test_LivestatusHostDowntime(self):
+        self.InputAndDisplay()
+        live_s = self.getSocket('Livestatus')
+
+        live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_1')
+        # Update not synced - sleep a bit
+        time.sleep(1)
+
+        live_s.send(self.getLivestatusRequest('get_downtimes'))
+        downs = live_s.recv()
+        downs = eval(downs[16:])
+        self.assertEqual(len(downs), 1, "Downtime push failed")
+        self.assertEqual(downs[0][-5], 'host_1', "Downtime push incorrect")
+
         # Check not more reported as problem
         live_s.send(
             self.getLivestatusRequest('get_host_is_problem') % 'host_1')
@@ -141,69 +183,62 @@ class ElasticsearchTC(TantaleTC):
         res = eval(res[16:])
         self.assertEqual(len(res), 0, "Downtimed host still in problem")
 
-        # Check downtimes logic on service
-        live_s.send(self.getLivestatusRequest(
-            'push_service_downtime') % ('host_1', 'service_0'))
-        for nb in range(5):
-            time.sleep(1)
-            live_s.send(self.getLivestatusRequest('get_downtimes'))
-            res = live_s.recv()
-            res = eval(res[16:])
-            if len(res) > 1:
-                break
-        self.assertEqual(len(res), 2, "Downtime push failed")
+        # Remove it now
+        live_s.send(
+            self.getLivestatusRequest('host_remove_downtime') % downs[0][0])
+        time.sleep(1)
 
-        self.stop()
+        # Check host is back
+        live_s.send(
+            self.getLivestatusRequest('get_host_is_problem') % 'host_1')
+        res = live_s.recv()
+        res = eval(res[16:])
+        self.assertEqual(
+            len(res), 1, "Host not a problem after removing downtime")
 
-    def test_Freshness(self):
-        # Low freshness timeout to bypass loop time
-        config = {
-            "modules": {"Input": {"freshness_timeout": 3}},
-            "backends": {
-                'ElasticsearchBackend': {'recreate_index_for_test': True}},
-        }
-
-        if self.bench:
-            hosts_nb = 2000
-            services_per_host = 3
-        else:
-            hosts_nb = 10
-            services_per_host = 3
-
-        # Merge config addins and start
-        self.server.config.merge(configobj.ConfigObj(config))
-        self.start()
-
-        # Input (create)
-        start = time.time()
-        self.push_checks(hosts_nb, services_per_host, delay=60)
-
+    def test_LivestatusServiceDowntime(self):
+        self.InputAndDisplay()
         live_s = self.getSocket('Livestatus')
 
-        # Hosts stats (wait every input done) - all host NOK
-        regexp = r'200\s+\d+ \[\[\d+, ' + str(hosts_nb) + ', \d+\]\]\n'
-        tries = 0
-        while True:
-            time.sleep(1)
-            tries += 1
-            if tries > 20:
-                break
+        live_s.send(self.getLivestatusRequest(
+            'push_service_downtime') % ('host_1', 'service_0'))
+        time.sleep(1)
+
+        live_s.send(self.getLivestatusRequest('get_downtimes'))
+        res = live_s.recv()
+        res = eval(res[16:])
+        self.assertEqual(len(res), 1, "Downtime push failed")
+
+    def test_InputFreshnessWork(self):
+        """
+        Check freshness update works by checking logs
+        Tests checks are push from the past by default
+        they all trigger freshness
+        """
+        add_config = {"modules": {"Input": {"freshness_timeout": 1}}}
+        start = time.time()
+        self.InputAndDisplay(bench=self.bench, add_config=add_config)
+        live_s = self.getSocket('Livestatus')
+
+        # Hosts stats (loop till down hosts == total hosts)
+        for nb in range(20):
+            time.sleep(0.5)
             live_s.send(self.getLivestatusRequest('hosts_stats'))
             res = live_s.recv()
-            if re.search(regexp, res):
+            res = eval(res[16:])
+            if res[0][0] == res[0][1]:
                 break
-        self.assertRegexpMatches(
-            res, regexp, "Input longer than 10s, quitting")
 
-        # Get logs - on freshness update
-        live_s.send("%s\n" % self.getLivestatusRequest('get_logs'))
+        stop = time.time()
+
+        # Check freshness changes were logged
+        live_s.send(self.getLivestatusRequest('get_logs'))
         res = live_s.recv()
         res = eval(res[16:])
         self.assertTrue(len(res) > 0, "Logs empty")
 
-        stop = time.time()
         if self.bench:
             print("")
             print(
-                "Update %d checks to outdated in %f seconds." %
-                ((hosts_nb * (services_per_host + 1)), (stop - start)))
+                "Created then outdated those checks in %f seconds." %
+                (stop - start))
