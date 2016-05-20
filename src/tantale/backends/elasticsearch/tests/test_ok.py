@@ -155,12 +155,16 @@ class ElasticsearchTC(TantaleTC):
 
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_1')
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_2')
-        time.sleep(2)
 
-        live_s.send(self.getLivestatusRequest('get_downtimes'))
-        downs = live_s.recv()
-        downs = eval(downs[16:])
-        self.assertEqual(len(downs), 2, "Downtime push failed")
+        for nb in range(20):
+            time.sleep(0.5)
+            live_s.send(self.getLivestatusRequest('get_downtimes'))
+            res = live_s.recv()
+            res = eval(res[16:])
+            if len(res) == 2:
+                break
+
+        self.assertEqual(len(res), 2, "Downtime push failed")
 
     def test_LivestatusHostDowntime(self):
         self.InputAndDisplay()
@@ -230,6 +234,8 @@ class ElasticsearchTC(TantaleTC):
                 break
 
         stop = time.time()
+
+        time.sleep(1)
 
         # Check freshness changes were logged
         live_s.send(self.getLivestatusRequest('get_logs'))
