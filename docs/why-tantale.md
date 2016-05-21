@@ -1,10 +1,13 @@
 # Why Tantale ?
 
-By experience, it can be difficult to query or interface monitoring with other tools on classis setup. I was searching a solution to display monitoring logs on grafana frontend.
+By experience, it can be difficult to query or interface monitoring with other tools on classis setup (Nagios, OMD, Check_mk). 
+
+I was searching a solution to make correlation analysis on systems problems (frequency, duration, ...).
 
 ## Objectives
 
   * Provide a Livestatus API over non monitoring specific tools.
+  * Scaling easily
   * Rely on common used tools (diamond, elasticsearch, ...) to be interoperable
 
 ## Assumptions
@@ -17,11 +20,9 @@ Tantale carry configuration regarding data (checks, contacts, ...) **only** on C
 
 ### Livestatus API is rich, but sometimes not used
 
-Perfdata are called metrics today.
+Perfdata are called metrics today. Indeed, tantale does not store nor display them.
 
-...
-
-Tantale provide Livestatus API, but some functionnalities may differ from classic implement.
+Tantale provide Livestatus API, but some functionnalities may differ from classic implementations (like downtimes, commands, ...).
 [Details on livestatus implement](livestatus.md)
 
 ### Passive checks

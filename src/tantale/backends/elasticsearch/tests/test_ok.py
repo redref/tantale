@@ -154,7 +154,9 @@ class ElasticsearchTC(TantaleTC):
         live_s = self.getSocket('Livestatus')
 
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_1')
+        live_s.send("\n")
         live_s.send(self.getLivestatusRequest('push_host_downtime') % 'host_2')
+        live_s.send("\n")
 
         for nb in range(20):
             time.sleep(0.5)
@@ -219,7 +221,7 @@ class ElasticsearchTC(TantaleTC):
         Tests checks are push from the past by default
         they all trigger freshness
         """
-        add_config = {"modules": {"Input": {"freshness_timeout": 1}}}
+        add_config = {"modules": {"Input": {"freshness_timeout": 2}}}
         start = time.time()
         self.InputAndDisplay(bench=self.bench, add_config=add_config)
         live_s = self.getSocket('Livestatus')

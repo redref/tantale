@@ -7,8 +7,10 @@ LIVESTATUS : events filters
 
 LIVESTATUS : host_num_services_*
 
-TESTS COVERAGE on excepts/...
+CLIENT : Diamond Source Trend
 
-DOC
+TESTS : coverage on excepts/...
 
-User behavior, not overwriting, ...
+DOC : refresh / extend
+
+INPUT : User behavior, not overwriting, ...
