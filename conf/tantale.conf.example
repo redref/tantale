@@ -116,6 +116,21 @@ expression = "( {diskspace.root.byte_free} / {diskspace.root.byte_avail} ) * 100
 # Check expression value range (low crit, low warn, up warn, up crit)
 thresholds = 10, 20, "", ""
 
+[[[fs_root_trend]]]
+# Example : trend fs usage over 1 hour
+#           to see if it's going full in the next 24 / 48 hours
+type = diamond
+prefix = servers.domain.my_fqdn
+
+# Condition - apply expression only if true (avoid zero division)
+condition = "{diskspace.root.byte_free} < {3600|diskspace.root.byte_free}"
+
+# Now available space / last hour space progression
+expression = "( {diskspace.root.byte_avail} - {diskspace.root.byte_free} ) / ( {diskspace.root.byte_free} - {3600|diskspace.root.byte_free} )"
+
+# Check expression value range (low crit, low warn, up warn, up crit)
+thresholds = 24, 48, "", ""
+
 ################################################################################
 ### Options for backends
 [backends]

@@ -18,12 +18,14 @@ except:
 class DiamondSource(object):
     def __init__(self, config, checks):
         self.log = logging.getLogger('tantale.client')
+
         self.interval = config['interval']
         self.fifo_path = config['diamond_fifo']
         self.create_fifo(self.fifo_path)
 
         # Parse checks
         self.metrics = {}
+
         for check in checks:
 
             # Prefix
@@ -38,14 +40,16 @@ class DiamondSource(object):
             # Thresholds
             thresholds = checks[check].get('thresholds', None)
             if not thresholds:
-                self.log.info(
+                self.log.warning(
                     "Diamond : dropping check '%s', "
                     "no thresholds defined" % check)
+                continue
 
             if len(thresholds) != 4:
-                self.log.info(
+                self.log.warning(
                     "Diamond : dropping check '%s', thresholds must contain "
                     "4 elements (lc, lw, uw, uc)" % check)
+                continue
 
             explicit_thresholds = {}
             for idx, name in enumerate(
@@ -59,28 +63,59 @@ class DiamondSource(object):
 
             checks[check]['thresholds'] = explicit_thresholds
 
+            # Condition
+            condition = checks[check].get('condition', None)
+            if condition:
+                checks[check]['condition'] = self._parse_expression(
+                    condition, check, checks[check]['prefix'])
+
             # Expression
             expression = checks[check].get('expression', None)
             if not expression:
-                self.log.info(
+                self.log.warning(
                     "Diamond : dropping check '%s', "
                     "no expression defined" % key)
+                continue
+            checks[check]['expression'] = self._parse_expression(
+                expression, check, checks[check]['prefix'])
 
-            metrics = re.findall(r'\{([^\}]+)\}', expression)
-            checks[check]['formula'] = re.sub(r'\{[^\}]+\}', '{}', expression)
-
-            # Save full metrics name
-            checks[check]['metrics'] = []
-            for metric in metrics:
-                if checks[check]['prefix'] != "":
-                    metric = checks[check]['prefix'] + metric
-                # To check
-                checks[check]['metrics'].append(metric)
-                # To global
-                self.metrics[metric] = self.metrics.get(metric, [])
-                self.metrics[metric].append(check)
+            self.log.debug('Diamond : parsed %s' % checks[check])
 
         self.checks = checks
+
+        self.log.debug('Diamond : global metrics %s' % self.metrics)
+
+    def _parse_expression(self, expression, check, prefix):
+        metrics = []
+        formula = re.sub(r'\{[^\}]+\}', '{}', expression)
+
+        # Work with metrics (name, retention)
+        for metric in re.findall(r'\{([^\}]+)\}', expression):
+            # Trend metric (with time slot)
+            split = metric.split('|')
+            if len(split) > 1:
+                metric = split[1]
+                keep = int(split[0])
+            else:
+                keep = 0
+
+            if prefix != "":
+                metric = prefix + metric
+
+            # Keep information check wide
+            metrics.append((metric, keep))
+
+            # Make a global retention hash
+            if metric not in self.metrics:
+                self.metrics[metric] = {
+                    'checks': [check], 'retention': keep}
+            else:
+                if self.metrics[metric]['retention'] < keep:
+                    self.metrics[metric]['retention'] = keep
+                if check not in self.metrics[metric]['checks']:
+                    self.metrics[metric]['checks'].append(check)
+
+        return {"metrics": metrics, 'formula': formula}
 
     def run(self, event, results):
         self.retention = {}
@@ -105,6 +140,31 @@ class DiamondSource(object):
                     else:
                         results[name].update(out)
 
+    def gather_values(self, check, metrics):
+        lower_ts = None
+        vals = []
+
+        for metric, when in metrics:
+
+            if metric not in self.retention:
+                self.log.info(
+                    "Diamond : %s missing metric %s" %
+                    (check, metric))
+                return None, None
+
+            if when == 0:
+                if (
+                    lower_ts is None or
+                    self.retention[metric][-1][1] < lower_ts
+                ):
+                    lower_ts = self.retention[metric][-1][1]
+                vals.append(self.retention[metric][-1][0])
+            else:
+                # Take old metric
+                vals.append(self.retention[metric][0][0])
+
+        return vals, lower_ts
+
     def process_diamond(self, lines):
         result = ""
         for line in lines.strip().split('\n'):
@@ -120,51 +180,73 @@ class DiamondSource(object):
             if name not in self.metrics:
                 continue
 
-            self.retention[name] = (value, ts)
+            if name not in self.retention:
+                self.retention[name] = []
+            self.retention[name].append((value, ts))
+
+            print(self.retention)
 
             # Compute check
-            for check in self.metrics[name]:
+            for check in self.metrics[name]['checks']:
+                name = check
+                check = self.checks[check]
 
-                lower_ts = None
-                vals = []
+                if 'condition' in check:
+                    try:
+                        c_vals, ts = self.gather_values(
+                            name, check['condition']['metrics'])
+                        self.log.debug(c_vals)
+                        if not c_vals:
+                            continue
 
-                for metric in self.checks[check]['metrics']:
-
-                    if metric not in self.retention:
-                        self.log.info(
-                            "Diamond : %s missing metric %s" %
-                            (check, metric))
-                        vals = None
-                        break
-
-                    if (
-                        lower_ts is None or
-                        self.retention[metric][1] < lower_ts
-                    ):
-                        lower_ts = self.retention[metric][1]
-
-                    vals.append(self.retention[metric][0])
-
-                if vals is None:
-                    continue
+                        formula = check['condition']['formula'].format(*c_vals)
+                        if not eval(formula):
+                            yield name, {
+                                "status": 0,
+                                "output": "Condition not met",
+                                "timestamp": ts,
+                            }
+                            continue
+                    except:
+                        self.log.info('Diamond : %s condition failed' % name)
+                        self.log.debug(
+                            'Diamond : trace - %s' % traceback.format_exc())
+                        continue
 
                 try:
-                    formula = self.checks[check]['formula'].format(*vals)
+                    vals, ts = self.gather_values(
+                            name, check['expression']['metrics'])
+                    if not vals:
+                        continue
+
+                    formula = check['expression']['formula'].format(*vals)
                     computed = float(eval(formula))
                 except:
-                    self.log.info('Diamond : %s expression failed' % check)
+                    self.log.info('Diamond : %s expression failed' % name)
                     self.log.debug(
                         'Diamond : trace - %s' % traceback.format_exc())
                     continue
 
                 status, output = self.range_check(
-                    computed, **self.checks[check]['thresholds'])
+                    computed, **check['thresholds'])
 
-                yield check, {
+                yield name, {
                     "status": status,
                     "output": output,
-                    "timestamp": lower_ts,
+                    "timestamp": ts,
                 }
+
+        # Retention cleanup loop
+        for metric in self.metrics:
+            if metric not in self.retention:
+                continue
+
+            while (
+                len(self.retention[metric]) > 1 and
+                self.retention[metric][0][1] <
+                (time.time() - self.metrics[metric]['retention'])
+            ):
+                self.retention[metric].pop(0)
 
     def range_check(
         self, value,
