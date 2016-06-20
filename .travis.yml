@@ -2,7 +2,7 @@
 sudo: false
 language: python
 python:
-  - "3.4"
+  - "3.5"
 
 before_script:
   - bash setup_elasticsearch.sh
@@ -15,7 +15,7 @@ after_script:
 # All envs
 env:
   - TOX_ENV=py27
-  - TOX_ENV=py34
+  - TOX_ENV=py35
   - TOX_ENV=pep8
 
 cache:

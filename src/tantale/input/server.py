@@ -101,7 +101,11 @@ class InputServer(object):
                     sockfd, addr = s.accept()
                     connections.append(sockfd)
                 else:
-                    data = sock.recv(4096)
+                    if isinstance(sock, int):
+                        data = os.read(sock, 4096)
+                    else:
+                        data = sock.recv(4096)
+
                     if data == bytes(''):
                         # Disconnect
                         connections.remove(sock)

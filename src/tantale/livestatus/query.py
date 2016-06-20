@@ -115,7 +115,9 @@ class Query(object):
             self.flush()
 
     def append(self, result):
-        """ Map back tantale results columns to queried columns """
+        """
+        Map back tantale results columns to queried columns
+        """
         if self.columns:
             mapped_res = []
             for req_field in self.columns:

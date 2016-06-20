@@ -184,8 +184,6 @@ class DiamondSource(object):
                 self.retention[name] = []
             self.retention[name].append((value, ts))
 
-            print(self.retention)
-
             # Compute check
             for check in self.metrics[name]['checks']:
                 name = check

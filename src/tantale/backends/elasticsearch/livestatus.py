@@ -86,7 +86,10 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 filt['range'] = {field: {"gte": value}}
             elif operator == "~~":
                 # Not case insensitive
-                filt['regexp'] = {field: value + ".*"}
+                if not value.endswith(".*") and not value.endswith('$'):
+                    filt['regexp'] = {field: value + ".*"}
+                else:
+                    filt['regexp'] = {field: value}
             else:
                 raise Exception("Unknown operator %s" % operator)
 

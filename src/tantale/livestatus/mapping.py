@@ -11,7 +11,7 @@ FIELDS_MAPPING = {
     "state": "status",
     "name": "hostname",
     "host_name": "hostname",
-    "service_description": "output",
+    "service_description": "check",
     # No address here, only hostnames
     "address": "hostname",
     "last_state_change": "timestamp",

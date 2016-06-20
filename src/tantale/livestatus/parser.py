@@ -14,7 +14,9 @@ class Parser(object):
         self.log = logging.getLogger('tantale.livestatus')
 
     def field_map(self, field, table):
-        """ Map query field to tantale known field """
+        """
+        Map query field to tantale known field
+        """
         if field.startswith("%s_" % table[:-1]):
             field = field[len(table):]
         # Log got no final 's'
@@ -32,7 +34,7 @@ class Parser(object):
         if field in FIELDS_MAPPING:
             return FIELDS_MAPPING[field]
         elif field in FIELDS_DUMMY:
-            # Handle not wired fields
+            # Handle not mapped fields
             return None
         else:
             raise Exception('Unknown field %s' % field)

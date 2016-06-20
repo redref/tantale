@@ -157,7 +157,7 @@ class Client(object):
                             "timestamp": int(time.time()),
                             "hostname": hostname,
                             "status": 3,
-                            "output": "No result yet",
+                            "output": "OUTDATED - No result yet",
                         }
 
                 else:

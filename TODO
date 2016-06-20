@@ -3,14 +3,8 @@ LIVESTATUS : acknowledge / downtime comments
 
 INPUT : notifications ? alerting functions ?
 
-LIVESTATUS : events filters
-
 LIVESTATUS : host_num_services_*
-
-CLIENT : Diamond Source Trend
 
 TESTS : coverage on excepts/...
 
-DOC : refresh / extend
-
-INPUT : User behavior, not overwriting, ...
+INPUT : User behavior, not overwriting, per check...
