@@ -3,6 +3,8 @@
 
 import sys
 import os
+import subprocess
+import re
 
 from setuptools import setup, find_packages
 from setuptools.command.install import install
@@ -28,8 +30,27 @@ def get_version():
     Get version from version.py
     """
     sys.path.append(os.path.join(my_dir, 'src'))
-    from tantale import VERSION
-    return VERSION
+
+    p = subprocess.Popen(
+        "git --work-tree='%s' describe --tags" % my_dir,
+        shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+
+    if p.returncode == 0 and stdout:
+        version = '.'.join(stdout.decode('utf-8').strip().split('-')[0:-1])
+        # Rewrite version
+        v_file = os.path.join(my_dir, 'src/tantale/__init__.py')
+        with open(v_file, 'r') as f:
+            content = f.read()
+        content = re.sub(
+            r'\nVERSION\s*=.*\n', '\nVERSION = "%s"\n' % version, content)
+        with open(v_file, 'w') as f:
+            f.write(content)
+        return version
+
+    else:
+        from tantale import VERSION
+        return VERSION
 
 #
 # Setup options
@@ -38,6 +59,7 @@ setup_kwargs = dict(zip_safe=0)
 
 init_file = None
 data_files = []
+
 if not running_under_virtualenv():
     data_files = [
         ('/etc/tantale', ['conf/tantale.conf.example']),
@@ -70,6 +92,9 @@ class TantaleInstallClass(install):
                 f.write(content)
 
         install.run(self)
+
+        if os.path.isfile('/etc/init.d/tantale'):
+            os.lchmod('/etc/init.d/tantale', 755)
 
 setup(
     name='tantale',
