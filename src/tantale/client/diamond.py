@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import os
+import sys
 import re
 import stat
 import time
@@ -87,7 +88,20 @@ class DiamondSource(object):
 
     def _parse_expression(self, expression, check, prefix):
         metrics = []
-        formula = re.sub(r'\{[^\}]+\}', '{}', expression)
+
+        # Python 2.6 compat
+        if sys.version_info < (2, 7):
+            formula = expression
+            re_idx = 0
+            while True:
+                formula, nb = re.subn(
+                    r'\{[^\}]+\}', '__%s__' % re_idx, formula, count=1)
+                if nb == 0:
+                    break
+                re_idx += 1
+            formula = re.sub(r'__(\d+)__', r'{\1}', formula)
+        else:
+            formula = re.sub(r'\{[^\}]+\}', '{}', expression)
 
         # Work with metrics (name, retention)
         for metric in re.findall(r'\{([^\}]+)\}', expression):

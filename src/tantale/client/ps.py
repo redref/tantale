@@ -53,7 +53,10 @@ class PsSource(object):
                 command = ' '.join(process.cmdline())
 
                 for check in self.checks:
-                    if user and user != self.checks[check]['user']:
+                    if (
+                        user and self.checks[check]['user'] and
+                        user != self.checks[check]['user']
+                    ):
                         continue
 
                     if re.search(self.checks[check]['pattern'], command):

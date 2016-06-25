@@ -8,7 +8,6 @@ import sys
 import imp
 import optparse
 import logging
-import unittest
 import inspect
 import socket
 import time
@@ -16,6 +15,12 @@ import traceback
 from multiprocessing import Process, Event
 from six import binary_type
 from six import b as bytes
+
+# Python 2.6 compat
+if sys.version_info < (2, 7):
+    import unittest2 as unittest
+else:
+    import unittest
 
 # Fix path
 path = os.path.join(

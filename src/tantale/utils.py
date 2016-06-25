@@ -11,6 +11,14 @@ import logging.config
 import configobj
 from six import string_types
 
+# Python 2.6 compat
+try:
+    dictConfig = logging.config.dictConfig
+except:
+    import logutils.dictconfig
+    dictConfig = logutils.dictconfig.dictConfig
+    logging.NullHandler = logutils.NullHandler
+
 
 def set_logging_config(config=None):
     if not config:
@@ -36,7 +44,7 @@ def set_logging_config(config=None):
                 pass
 
     # Apply it
-    logging.config.dictConfig(config)
+    dictConfig(config)
 
 
 def str_to_bool(value):
