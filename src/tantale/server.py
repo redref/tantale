@@ -63,11 +63,11 @@ class Server(object):
 
         processes = []
         init_events = []
-        got_signal = False
+        got_signal = Event()
 
         # Set the signal handlers
         def sig_handler(signum, frame):
-            got_signal = True
+            got_signal.set()
             self.log.debug("%s received" % signum)
         signal.signal(signal.SIGINT, sig_handler)
         signal.signal(signal.SIGTERM, sig_handler)
@@ -152,11 +152,12 @@ class Server(object):
             for event in init_events:
                 # Maximum time starting
                 event.wait(15)
+            init_events = None
 
             # We are ready
             _onInitDone()
 
-            if not got_signal:
+            if not got_signal.is_set():
                 signal.pause()
 
             for child in processes:

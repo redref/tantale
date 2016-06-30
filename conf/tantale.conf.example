@@ -3,7 +3,7 @@
 ################################################################################
 
 ################################################################################
-### Options for the server
+### Options for daemon
 [server]
 
 # User tantale will run as
@@ -16,120 +16,6 @@ group =
 
 # Pid file
 pid_file = /var/run/tantale.pid
-
-################################################################################
-### Options for modules
-[modules]
-
-[[Livestatus]]
-enabled = True
-port = 6557
-
-[[Input]]
-enabled = True
-port = 2003
-
-# Max time (in seconds) check may wait others (in backend POV)
-ttl = 5
-
-# Freshness timeout (warning if check not fresh)
-#  status => 1, ouput prefixed with 'OUTDATED '
-#freshness_timeout = 120
-
-# Maximum number of checks waiting to be processed.
-# When queue is full, new are dropped.
-queue_size = 16384
-
-[[Client]]
-# enabled = False
-
-# Global refresh interval
-#   Force push every X seconds
-# interval = 30
-
-# Tantale Input server
-server_host = 127.0.0.1
-server_port = 2003
-
-# Contacts_groups for the host
-contacts = user_1, user_2
-
-# Diamond source configuration
-#   Input FIFO file path - must match diamond Handler config
-# diamond_fifo = /dev/shm/diamond_to_fifo
-
-# External source configuration
-#   Pre-forked workers number
-# external_workers = 3
-
-# Checks definition
-
-# All checks config keys
-#   hostname = <local fqdn>
-#     usefull to submit checks for other hosts
-
-# Host check - wired to host livestatus object
-[[[Host]]]
-# "ok" report sucessfull at any time
-type = ok
-
-[[[Host-fqdn.domain]]]
-# "ok" report sucessfull at any time
-name = Host
-type = ok
-hostname = fqdn.domain
-
-# Process ('ps') source example
-[[[ps_example]]]
-type = ps
-
-# Filter processes by regexp (required)
-regexp = 'in[ia]t'
-
-# Filter processes by user (no filter if not defined)
-user = root
-
-# Check number of process (low crit, low warn, up warn, up crit)
-thresholds = 1, 1, "", ""
-
-# External commands source example
-[[[external_example]]]
-type = external
-command = /bin/bash -c 'echo fail; exit 1'
-
-# Launch this check every X seconds
-# interval = 60
-
-
-# Diamond source example
-[[[fs_root]]]
-type = diamond
-hostname = fqdn.domain
-
-# Prefix added to expression metrics
-#   Default : ""
-prefix = servers.domain.my_fqdn
-
-# Mathematic expression
-expression = "( {diskspace.root.byte_free} / {diskspace.root.byte_avail} ) * 100"
-
-# Check expression value range (low crit, low warn, up warn, up crit)
-thresholds = 10, 20, "", ""
-
-[[[fs_root_trend]]]
-# Example : trend fs usage over 1 hour
-#           to see if it's going full in the next 24 / 48 hours
-type = diamond
-prefix = servers.domain.my_fqdn
-
-# Condition - apply expression only if true (avoid zero division)
-condition = "{diskspace.root.byte_free} < {3600|diskspace.root.byte_free}"
-
-# Now available space / last hour space progression
-expression = "( {diskspace.root.byte_avail} - {diskspace.root.byte_free} ) / ( {diskspace.root.byte_free} - {3600|diskspace.root.byte_free} )"
-
-# Check expression value range (low crit, low warn, up warn, up crit)
-thresholds = 24, 48, "", ""
 
 ################################################################################
 ### Options for backends
@@ -156,6 +42,132 @@ request_timeout = 30
 batch = 1000
 # maximum checks keeped in memory (FIFO) in case backend failing (trim)
 backlog_size = 2000
+
+################################################################################
+### Options for modules
+[modules]
+
+[[Livestatus]]
+enabled = True
+# port = 6557
+
+[[Input]]
+enabled = True
+# port = 2003
+
+# Maximum time (in seconds) checks are bufferized
+# to fill 'batch' backend size
+# Default : None
+ttl = 5
+
+# Freshness factor
+#   how many interval to wait a check before declaring it 'OUTDATED'
+#   Outdated : status => 1, output prefixed with 'OUTDATED '
+# freshness_timeout = 2
+
+# Maximum number of checks waiting to be processed.
+# When queue is full, new ones are dropped.
+# queue_size = 16384
+
+[[Client]]
+# enabled = False
+
+# Tantale Input server
+server_host = 127.0.0.1
+server_port = 2003
+
+# Diamond source configuration
+#   Input FIFO file path - must match diamond Handler config
+# diamond_fifo = /dev/shm/diamond_to_fifo
+
+# External source configuration
+#   Pre-forked workers number
+# external_workers = 3
+
+#
+# Checks definition
+#
+#   Common keys (available on all sources)
+#     hostname - default : <host_fqdn>
+#       used to submit checks from cnames, cluster, ...
+#     interval - default : 60
+#       run check every X seconds
+#     name - default : None
+#       specify a check name (use when 2 checks have the same name)
+#     contacts - default : None
+#       users or groups (depending on your setup) able to view check
+
+# Set checks default interval
+interval = 30
+
+# Set checks default contacts
+contacts = user_1, user_2
+
+# Host check - wired to host livestatus object
+[[[Host]]]
+# "ok" report sucessfull at any time
+source = ok
+
+[[[Host-fqdn.domain]]]
+# "ok" report sucessfull at any time
+name = Host
+source = ok
+hostname = fqdn.domain
+
+# Process ('ps') source example
+[[[ps_example]]]
+source = ps
+
+# Filter processes by regexp (required)
+regexp = 'in[ia]t'
+
+# Filter processes by user (no filter if not defined)
+user = root
+
+# Check number of process (low crit, low warn, up warn, up crit)
+thresholds = 1, 1, "", ""
+
+#
+# External commands source example
+#
+[[[external_example]]]
+source = external
+command = /bin/bash -c 'echo fail; exit 1'
+
+# Launch this check every X seconds
+# interval = 60
+
+#
+# Diamond source examples
+#
+[[[fs_root]]]
+source = diamond
+hostname = fqdn.domain
+
+# Prefix added to expression metrics
+#   Default : ""
+prefix = servers.domain.my_fqdn
+
+# Mathematic expression
+expression = "( {diskspace.root.byte_free} / {diskspace.root.byte_avail} ) * 100"
+
+# Check expression value range (low crit, low warn, up warn, up crit)
+thresholds = 10, 20, "", ""
+
+[[[fs_root_trend]]]
+# Example : trend fs usage over 1 hour
+#           to see if it's going full in the next 24 / 48 hours
+source = diamond
+prefix = servers.domain.my_fqdn
+
+# Condition - apply expression only if true (avoid zero division)
+condition = "{diskspace.root.byte_free} < {3600|diskspace.root.byte_free}"
+
+# Now available space / last hour space progression
+expression = "( {diskspace.root.byte_avail} - {diskspace.root.byte_free} ) / ( {diskspace.root.byte_free} - {3600|diskspace.root.byte_free} )"
+
+# Check expression value range (low crit, low warn, up warn, up crit)
+thresholds = 24, 48, "", ""
 
 ################################################################################
 ### Options for logging

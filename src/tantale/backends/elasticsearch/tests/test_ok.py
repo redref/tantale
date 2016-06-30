@@ -36,26 +36,31 @@ class ElasticsearchTC(TantaleTC):
 
             input_s = self.getSocket('Input')
 
-            checks = {}
+            checks = []
 
-            checks['Host'] = {
+            checks.append({
+                "check": 'Host',
                 "status": self.randStatus(host),
                 "timestamp": (int(time.time()) - delay),
                 "contacts": ["user_1", "user_%d" % host],
                 "hostname": "host_%d" % host,
                 "output": "Check %d" % host,
-            }
+                "interval": 2,
+            })
 
             for service in range(services_per_host):
-                checks['service_%d' % service] = {
+                checks.append({
+                    "check": 'service_%d' % service,
                     "status": self.randStatus(service),
                     "timestamp": (int(time.time()) - delay),
                     "contacts": ["user_1", "user_%d" % host],
                     "hostname": "host_%d" % host,
                     "output": "Service %d" % service,
-                }
+                    "interval": 2,
+                })
 
-            input_s.send(json.dumps(checks) + "\n")
+            for i in checks:
+                input_s.send(json.dumps(i) + "\n")
             input_s.close()
 
     def test_Status(self):

@@ -15,18 +15,21 @@ class Check(object):
     __slots__ = [
         'type', 'tags', 'id', 'parsing_ts',
         'timestamp', 'hostname', 'check', 'status', 'output',
-        'contacts',
+        'contacts', 'interval'
     ]
-    # Relevant attributes (backend POV)
+
+    # Relevant attributes (to be stored in backend status)
     fields = [
         'timestamp', 'hostname', 'check', 'status', 'output',
-        'contacts']
-    # Relevant attributes (backend logs POV)
+        'contacts', 'interval']
+
+    # Relevant attributes (to be stored in backend events)
     log_fields = [
         'timestamp', 'hostname', 'check', 'status', 'output']
 
-    def __init__(self, key, timestamp=None, hostname=None,
-                 status=None, output=None, contacts=None, check=None, **tags):
+    def __init__(self, check=None, timestamp=None, hostname=None,
+                 status=None, output=None, contacts=None,
+                 interval=None, **tags):
         """
         Create new instance
         """
@@ -35,9 +38,11 @@ class Check(object):
         self.timestamp = int(timestamp)
         self.contacts = contacts
         self.hostname = hostname
+        self.interval = int(interval)
 
         if check is None:
-            check = key
+            raise Exception(
+                'Check have no name ! You may be the multiface god.')
 
         if check == 'Host':
             self.type = 'host'
@@ -67,12 +72,11 @@ class Check(object):
             log.debug(string)
             return
 
-        for name in checks_hash:
-            try:
-                yield Check(name, **checks_hash[name])
-            except:
-                log.info('CHECK: Error on %s - %s' % (name, checks_hash[name]))
-                log.debug(traceback.format_exc())
+        try:
+            yield Check(**checks_hash)
+        except:
+            log.info('CHECK: Error on %s' % checks_hash)
+            log.debug(traceback.format_exc())
 
     def __getstate__(self):
         return dict(

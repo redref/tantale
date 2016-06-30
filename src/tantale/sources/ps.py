@@ -7,13 +7,14 @@ import re
 import psutil
 import logging
 
+from tantale.client.source import BaseSource
 
-class PsSource(object):
-    def __init__(self, config, checks):
-        self.log = logging.getLogger('tantale.client')
-        self.interval = config['interval']
 
-        for check in checks:
+class PsSource(BaseSource):
+    def process_config(self):
+        checks = self.checks
+
+        for check in self.checks:
             checks[check]['pattern'] = re.compile(checks[check]['regexp'])
             checks[check]['user'] = checks[check].get('user', None)
 
@@ -43,9 +44,13 @@ class PsSource(object):
 
         self.checks = checks
 
-    def run(self, event, results):
+    def run(self):
         while True:
+            self.get_and_wait_next_check()
+
             res = {}
+
+            # Get timestamp before process enumeration
             now = int(time.time())
 
             for process in psutil.process_iter():
@@ -69,14 +74,7 @@ class PsSource(object):
                     self.checks[check]['user'],
                     **self.checks[check]['thresholds']
                 )
-
-                results[check]['output'] = output
-                results[check]['timestamp'] = now
-                if status != results[check]['status']:
-                    results[check]['status'] = status
-                    event.set()
-
-            time.sleep(self.interval)
+                self.send(check, status, output, now)
 
     def range_check(
         self, value, regexp, user,

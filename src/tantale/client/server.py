@@ -14,46 +14,37 @@ from threading import Thread, Event
 from six import b as bytes
 
 from tantale.utils import load_class
+from tantale import sources
 
-from tantale.client.diamond import DiamondSource
-from tantale.client.ps import PsSource
-from tantale.client.external import ExternalSource
+try:
+    from Queue import Queue
+except:
+    from queue import Queue
 
 try:
     from setproctitle import setproctitle, getproctitle
 except ImportError:
     setproctitle = None
 
-SOURCES = ('ps', 'diamond', 'external')
-
 
 class Client(object):
     """
-    Tantale client :
-        - Spawn "diamond" metrics marsing thread
-        - Spawn "ps" thread
-        - Spawn "external" scheduler thread
-        - Spawn "timer" interval thread
-    Push all checks on :
-        - Event
-        - Interval time
+    Tantale client
     """
 
     def __init__(self, config):
         self.log = logging.getLogger('tantale.client')
+
         self.config = config['modules']['Client']
         self.config['interval'] = int(self.config['interval'])
 
-        # Result hash
-        self.results = {}
+        # Result stash
+        self.res_q = Queue(maxsize=2048)
 
         # Tantale input target
         self.host = self.config['server_host']
         self.port = int(self.config['server_port'])
         self.sock = None
-
-        # Global config
-        self.contacts = self.config['contacts']
 
     def connect(self):
         try:
@@ -63,62 +54,48 @@ class Client(object):
         except:
             self.sock = None
 
-    def send(self, results):
-        """ Send data with exception handling """
-        if not self.sock:
-            self.connect()
-
-        if not self.sock:
-            self.log.info(
-                'Reconnect to %s:%s failed' % (self.host, self.port))
-
-        for key in results:
-            self.log.debug("Sending: %s -> %s" % (key, results[key]))
-
-        try:
-            self.sock.send(bytes(json.dumps(results) + '\n'))
-        except:
-            pass
-
     def close(self):
         if self.sock:
             self.sock.shutdown(socket.SHUT_RDWR)
             self.sock.close()
+        self.sock = None
 
     def __del__(self):
         self.close()
 
-    def timer_thread(self, event, interval):
-        while True:
-            event.wait(interval)
-            if not event.is_set():
-                event.set()
-            else:
-                time.sleep(1)
-
-    def loop_thread(self, event):
+    def sending_thread(self, res_q):
+        """
+        Send results from queue
+        """
         self.connect()
 
-        # Wait at least one interval
-        # Avoid sending while running all a first time
-        time.sleep(self.config['interval'])
-
         while True:
-            event.wait()
-            event.clear()
 
-            # Add contacts to results
-            for result in self.results:
-                self.results[result]['contacts'] = self.contacts
+            result = res_q.get(True)
+            # Not keeping data in memory
+            res_q.task_done()
 
-            # Renew ok timestamps
-            for check in self.checks['ok']:
-                self.results[check]['timestamp'] = int(time.time())
+            if not self.sock:
+                self.connect()
 
-            self.send(self.results)
+            if not self.sock:
+                self.log.info(
+                    'Reconnect to %s:%s failed' % (self.host, self.port))
+                continue
+
+            self.log.debug("Sending: %s" % result)
+
+            try:
+                self.sock.send(bytes(json.dumps(result) + '\n'))
+            except:
+                self.close()
 
     def run(self, init_done=None):
-        """ Launch threads, then wait for signal """
+        """
+        Parse checsk
+        Spawn sources
+        Spawn sender thread
+        """
         if setproctitle:
             setproctitle('%s - Client' % getproctitle())
 
@@ -127,75 +104,61 @@ class Client(object):
         self.checks = {}
         for key in self.config:
             if isinstance(self.config[key], dict):
-                # If name specified, overwrite dict name
-                name = self.config[key].get('name', key)
-
                 check = self.config[key]
-                check_type = check.get('type', None)
-                hostname = check.get('hostname', default_host)
 
-                if check_type in SOURCES + ("ok",):
-                    if check_type not in self.checks:
-                        self.checks[check_type] = {}
+                # If name specified, overwrite dict name
+                check['name'] = check.get('name', key)
+
+                check['source'] = check.get('source', None)
+
+                # Default hostname
+                check['hostname'] = check.get('hostname', default_host)
+
+                # Default contacts
+                check['contacts'] = check.get(
+                    'contacts', self.config['contacts'])
+
+                # Defualt interval
+                check['interval'] = int(check.get(
+                    'interval', self.config['interval']))
+
+                if check['source'] and hasattr(sources, check['source']):
 
                     self.log.debug('Found check : %s -> %s' % (key, check))
-                    self.checks[check_type][key] = check
 
-                    # Pre-provision results
-                    if check_type == "ok":
-                        self.results[key] = {
-                            "check": name,
-                            "timestamp": int(time.time()),
-                            "hostname": hostname,
-                            "status": 0,
-                            "output": "Ok check",
-                        }
-                    else:
-                        # Send Ok default result
-                        self.results[key] = {
-                            "check": name,
-                            "timestamp": int(time.time()),
-                            "hostname": hostname,
-                            "status": 3,
-                            "output": "OUTDATED - No result yet",
-                        }
+                    # Make a source checks hash
+                    if check['source'] not in self.checks:
+                        self.checks[check['source']] = {}
+                    self.checks[check['source']][key] = check
 
                 else:
-                    self.log.error('Check type %s unknown.')
+                    self.log.error(
+                        "Check '%s' source '%s' unknown" %
+                        (check, check['source']))
 
-                # Remove check from config
+                # Clean config from checks
                 del self.config[key]
 
         def sig_handler(signum, frame):
             self.log.debug("%s received" % signum)
         signal.signal(signal.SIGTERM, sig_handler)
 
-        event = Event()
-
         # Loop
-        t = Thread(target=self.loop_thread, args=(event,))
-        t.daemon = True
-        t.start()
-
-        # Timer
-        t = Thread(
-            target=self.timer_thread, args=(event, self.config['interval']))
+        t = Thread(target=self.sending_thread, args=(self.res_q,))
         t.daemon = True
         t.start()
 
         # Launch source threads
-        for source in SOURCES:
-            if source not in self.checks:
-                continue
+        for source in self.checks:
             try:
                 cls = load_class(
-                    'tantale.client.%s.%sSource' % (source, source.title()))
-                src = cls(self.config, self.checks[source])
-                t = Thread(target=src.run, args=(event, self.results))
+                    'tantale.sources.%s.%sSource' % (source, source.title()))
+                src = cls(self.config, self.checks[source], self.res_q)
+                t = Thread(target=src.run)
                 t.daemon = True
                 t.start()
             except:
-                self.log.error('Failed to initialize %s source' % source)
+                self.log.error("Failed to initialize '%s' source" % source)
                 self.log.debug(traceback.format_exc())
 
         if init_done:

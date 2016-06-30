@@ -15,17 +15,20 @@ try:
 except:
     BlockingIOError = None
 
+from tantale.client.source import BaseSource
 
-class DiamondSource(object):
-    def __init__(self, config, checks):
-        self.log = logging.getLogger('tantale.client')
 
-        self.interval = config['interval']
-        self.fifo_path = config['diamond_fifo']
+class DiamondSource(BaseSource):
+    def process_config(self):
+        self.fifo_path = self.config['diamond_fifo']
         self.create_fifo(self.fifo_path)
 
         # Parse checks
         self.metrics = {}
+        self.retention = {}
+        self.fifo = None
+
+        checks = self.checks
 
         for check in checks:
 
@@ -84,6 +87,9 @@ class DiamondSource(object):
 
         self.checks = checks
 
+        # Open FIFO early to begin receiving metrics
+        self.fifo = self.open_fifo(self.fifo_path)
+
         self.log.debug('Diamond : global metrics %s' % self.metrics)
 
     def _parse_expression(self, expression, check, prefix):
@@ -123,6 +129,7 @@ class DiamondSource(object):
             if metric not in self.metrics:
                 self.metrics[metric] = {
                     'checks': [check], 'retention': keep}
+                self.retention[metric] = []
             else:
                 if self.metrics[metric]['retention'] < keep:
                     self.metrics[metric]['retention'] = keep
@@ -131,28 +138,98 @@ class DiamondSource(object):
 
         return {"metrics": metrics, 'formula': formula}
 
-    def run(self, event, results):
-        self.retention = {}
+    def execute_check(self, name):
+        """
+        Read FIFO, save interesting values
+        Check the one we got
+        """
+        self.get_and_save_metrics_from_fifo()
 
-        fifo = None
+        check = self.checks[name]
 
-        while True:
-            # Keep fifo open
-            if not fifo:
-                fifo = self.open_fifo(self.fifo_path)
-            if not fifo:
-                self.log.warn('Diamond : failed to open FIFO')
-                time.sleep(self.interval)
+        # Check about condition
+        if 'condition' in check:
+            try:
+                c_vals, ts = self.gather_values(
+                    name, check['condition']['metrics'])
+                if not c_vals:
+                    self.send(name, 3, 'OUTDATED - No result yet')
+                    return
+
+                formula = check['condition']['formula'].format(*c_vals)
+
+                if not eval(formula):
+                    self.send(
+                        name, 0,
+                        "Diamond trend : Condition not met", ts)
+                    return
+            except:
+                self.log.info('Diamond : %s condition failed' % name)
+                self.log.debug(
+                    'Diamond : trace - %s' % traceback.format_exc())
+                self.send(name, 3, 'OUTDATED - No result yet')
+                return
+
+        # Appky formula
+        try:
+            vals, ts = self.gather_values(
+                    name, check['expression']['metrics'])
+            if not vals:
+                self.send(name, 3, 'OUTDATED - No result yet')
+                return
+
+            formula = check['expression']['formula'].format(*vals)
+            computed = float(eval(formula))
+        except:
+            self.log.info('Diamond : %s expression failed' % name)
+            self.log.debug(
+                'Diamond : trace - %s' % traceback.format_exc())
+            self.send(name, 3, 'OUTDATED - No result yet')
+            return
+
+        status, output = self.range_check(
+            computed, **check['thresholds'])
+
+        self.send(name, status, output, ts)
+
+    def get_and_save_metrics_from_fifo(self):
+        if not self.fifo:
+            self.fifo = self.open_fifo(self.fifo_path)
+        if not self.fifo:
+            self.log.warn('Diamond : failed to open FIFO')
+            return
+
+        try:
+            res = self.read_fifo(self.fifo)
+        except:
+            self.fifo = None
+
+        if not res:
+            return
+
+        for line in res.strip().split('\n'):
+            try:
+                name, value, ts = line.split(' ')
+                value = float(value)
+                ts = int(ts)
+            except:
+                # No log here
                 continue
 
-            res = self.read_fifo(fifo)
-            if res:
-                for name, out in self.process_diamond(res):
-                    if out['status'] != results[name]['status']:
-                        results[name].update(out)
-                        event.set()
-                    else:
-                        results[name].update(out)
+            # If we don't known, zap it
+            if name not in self.metrics:
+                continue
+
+            self.retention[name].append((value, ts))
+
+        # Retention cleanup loop
+        for metric in self.metrics:
+            while (
+                len(self.retention[metric]) > 1 and
+                self.retention[metric][0][1] <
+                (time.time() - self.metrics[metric]['retention'])
+            ):
+                self.retention[metric].pop(0)
 
     def gather_values(self, check, metrics):
         lower_ts = None
@@ -160,7 +237,7 @@ class DiamondSource(object):
 
         for metric, when in metrics:
 
-            if metric not in self.retention:
+            if len(self.retention[metric]) == 0:
                 self.log.info(
                     "Diamond : %s missing metric %s" %
                     (check, metric))
@@ -174,91 +251,10 @@ class DiamondSource(object):
                     lower_ts = self.retention[metric][-1][1]
                 vals.append(self.retention[metric][-1][0])
             else:
-                # Take old metric
+                # Take oldest metric available
                 vals.append(self.retention[metric][0][0])
 
         return vals, lower_ts
-
-    def process_diamond(self, lines):
-        result = ""
-        for line in lines.strip().split('\n'):
-            try:
-                name, value, ts = line.split(' ')
-                value = float(value)
-                ts = int(ts)
-            except:
-                # No log here
-                continue
-
-            # If we don't known, zap it
-            if name not in self.metrics:
-                continue
-
-            if name not in self.retention:
-                self.retention[name] = []
-            self.retention[name].append((value, ts))
-
-            # Compute check
-            for check in self.metrics[name]['checks']:
-                name = check
-                check = self.checks[check]
-
-                if 'condition' in check:
-                    try:
-                        c_vals, ts = self.gather_values(
-                            name, check['condition']['metrics'])
-                        self.log.debug(c_vals)
-                        if not c_vals:
-                            continue
-
-                        formula = check['condition']['formula'].format(*c_vals)
-                        if not eval(formula):
-                            yield name, {
-                                "status": 0,
-                                "output": "Condition not met",
-                                "timestamp": ts,
-                            }
-                            continue
-                    except:
-                        self.log.info('Diamond : %s condition failed' % name)
-                        self.log.debug(
-                            'Diamond : trace - %s' % traceback.format_exc())
-                        continue
-
-                try:
-                    vals, ts = self.gather_values(
-                            name, check['expression']['metrics'])
-                    if not vals:
-                        continue
-
-                    formula = check['expression']['formula'].format(*vals)
-                    computed = float(eval(formula))
-                except:
-                    self.log.info('Diamond : %s expression failed' % name)
-                    self.log.debug(
-                        'Diamond : trace - %s' % traceback.format_exc())
-                    continue
-
-                status, output = self.range_check(
-                    computed, **check['thresholds'])
-
-                yield name, {
-                    "status": status,
-                    "output": output,
-                    "timestamp": ts,
-                }
-
-        # Retention cleanup loop
-        for metric in self.metrics:
-            if metric not in self.retention:
-                continue
-
-            while (
-                len(self.retention[metric]) > 1 and
-                self.retention[metric][0][1] <
-                (time.time() - self.metrics[metric]['retention'])
-            ):
-                self.retention[metric].pop(0)
 
     def range_check(
         self, value,
@@ -292,7 +288,7 @@ class DiamondSource(object):
     def open_fifo(self, fifo_path):
         try:
             if fifo_path:
-                return os.open(fifo_path, os.O_RDONLY)
+                return os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
         except:
             self.log.error('Diamond : failed to open %s' % fifo_path)
             self.log.debug('Diamond : trace - %s' % traceback.format_exc())

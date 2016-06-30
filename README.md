@@ -27,6 +27,15 @@ Each Livestatus instance may handle **~ 50 clients concurrent connections** (acc
 
 Those numbers are tighly related to Elasticsearch cluster performance (benched on a single host).
 
+On client side:
+  * with 2 checks from each source (diamond trend on 1 metric)
+  * after 1h test time 
+  * 10 seconds global interval
+
+We get:
+  * no memory leak (hopefully) - around 16 MB resident memory
+  * 90 seconds cpu used - 2,5% of one core - mainly forking external commands
+
 ## Modules details
 
 Tantale start only one daemon, and activate modules by configuration. By example, you can configure a Client on a Livestatus host.
@@ -84,6 +93,10 @@ Client get data from checks source :
   Always green check. May be usefull on "Host" checks.
 
 Client keep an internal view on all checks. Push to Tantale Input on a regular basis or triggered from a status change, problems are **immediately reported**.
+
+Tantale sources ensure all checks are pushed to ensure new hosts checks are created. 
+
+>TOFIX : make a way to ensure new hosts are ok (new checks will be reported if host ok, but new hosts may not appear at all)
 
 ## Inspirations
 

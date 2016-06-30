@@ -45,24 +45,19 @@ class ClientTC(TantaleTC):
         # Merge config addins
         self.server.config.merge(configobj.ConfigObj(config))
 
-        # Prepare fifos
-        try:
-            os.unlink(diamond_fifo)
-        except:
-            pass
-        os.mkfifo(diamond_fifo)
-
     def tearDown(self):
-        try:
+        if os.path.exists(diamond_fifo):
             os.unlink(diamond_fifo)
-        except:
-            pass
         super(ClientTC, self).tearDown()
 
     def test_Diamond(self):
+        # Mkfifo done by tantale daemon, but ensure it
         self.start()
-
-        diamond_fd = os.open(diamond_fifo, os.O_WRONLY | os.O_NONBLOCK)
+        for i in range(20):
+            try:
+                diamond_fd = os.open(diamond_fifo, os.O_WRONLY | os.O_NONBLOCK)
+            except:
+                time.sleep(0.5)
 
         for metric in diamond_input.split("\n"):
             os.write(diamond_fd, bytes("%s %d\n" % (metric, int(time.time()))))
@@ -84,6 +79,8 @@ class ClientTC(TantaleTC):
             res[0][4],
             "29.85 (10.0, 20.0, None, None)", res)
         self.assertEqual(res[0][-1], 0, res)
+
+        os.close(diamond_fd)
 
         self.stop()
 
