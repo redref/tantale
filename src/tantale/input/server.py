@@ -43,15 +43,11 @@ class InputServer(object):
         self.config = config
 
         self.port = int(self.config['modules']['Input']['port'])
-
-        self.ttl = None
-        if self.config['modules']['Input']['ttl']:
-            self.ttl = int(self.config['modules']['Input']['ttl'])
-
-        self.freshness_timeout = None
-        if self.config['modules']['Input']['freshness_timeout']:
-            self.freshness_timeout = int(
-                self.config['modules']['Input']['freshness_timeout'])
+        self.ttl = int(self.config['modules']['Input']['ttl'])
+        self.freshness_factor = int(
+            self.config['modules']['Input']['freshness_factor'])
+        self.freshness_interval = int(
+            self.config['modules']['Input']['freshness_interval'])
 
     def run(self, check_queue, init_done):
         if setproctitle:
@@ -184,7 +180,9 @@ class InputServer(object):
 
             if string is not None:
 
-                for check in Check.parse(string, self.log):
+                for check in Check.parse(
+                    string, self.freshness_factor, self.log
+                ):
 
                     for backend in backends:
                         send_lock.acquire()
@@ -210,15 +208,9 @@ class InputServer(object):
 
         self.log.info("Exit")
 
-    def input_freshness(self):
-        if setproctitle:
-            setproctitle('%s - Input_Freshness' % getproctitle())
-
-        # Signals
-        def sig_handler(signum, frame):
-            self.log.debug("%s received" % signum)
-            self.running = False
-        signal.signal(signal.SIGTERM, sig_handler)
+    def freshness_worker(self):
+        # Save current time (startup grace)
+        start_time = time.time()
 
         # Load backends
         backends = []
@@ -234,24 +226,35 @@ class InputServer(object):
             self.log.critical('No available backends')
             return
 
-        # Grace time of one timeout
-        time.sleep(self.freshness_timeout)
-
-        # Logic
-        while self.running:
+        while True:
             self.log.debug('Run update')
 
             start = int(time.time())
 
             for backend in backends:
-                backend.freshness(self.freshness_timeout, 2, 'OUTDATED - ')
-
-            exec_time = int(time.time()) - start
-
-            # If faster then freshness_timeout / 2, sleep a bit
-            if exec_time < (self.freshness_timeout / 2):
-                time.sleep(self.freshness_timeout / 2 - exec_time)
+                backend.freshness(
+                    2, 'OUTDATED - ', start_time, self.freshness_interval)
 
             self.log.debug('End update')
 
+            exec_time = int(time.time()) - start
+
+            if exec_time < self.freshness_interval:
+                time.sleep(self.freshness_interval - exec_time)
+
+    def input_freshness(self):
+        if setproctitle:
+            setproctitle('%s - Input_Freshness' % getproctitle())
+
+        # Signals
+        def sig_handler(signum, frame):
+            self.log.debug("%s received" % signum)
+        signal.signal(signal.SIGTERM, sig_handler)
+
+        # Making a daemon thread to handle instant stop
+        t = Thread(target=self.freshness_worker)
+        t.daemon = True
+        t.start()
+
+        signal.pause()
         self.log.info("Exit")

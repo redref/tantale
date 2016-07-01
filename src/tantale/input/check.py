@@ -15,21 +15,23 @@ class Check(object):
     __slots__ = [
         'type', 'tags', 'id', 'parsing_ts',
         'timestamp', 'hostname', 'check', 'status', 'output',
-        'contacts', 'interval'
+        'contacts', 'freshness'
     ]
 
     # Relevant attributes (to be stored in backend status)
     fields = [
         'timestamp', 'hostname', 'check', 'status', 'output',
-        'contacts', 'interval']
+        'contacts', 'freshness']
 
     # Relevant attributes (to be stored in backend events)
     log_fields = [
         'timestamp', 'hostname', 'check', 'status', 'output']
 
-    def __init__(self, check=None, timestamp=None, hostname=None,
-                 status=None, output=None, contacts=None,
-                 interval=None, **tags):
+    def __init__(
+        self, check=None, timestamp=None, hostname=None,
+        status=None, output=None, contacts=None, interval=None,
+        freshness_factor=None, **tags
+    ):
         """
         Create new instance
         """
@@ -38,7 +40,7 @@ class Check(object):
         self.timestamp = int(timestamp)
         self.contacts = contacts
         self.hostname = hostname
-        self.interval = int(interval)
+        self.freshness = int(timestamp) + freshness_factor * int(interval)
 
         if check is None:
             raise Exception(
@@ -60,7 +62,7 @@ class Check(object):
             self.tags = {}
 
     @classmethod
-    def parse(cls, string, log):
+    def parse(cls, string, freshness_factor, log):
         """
         Generate Checks object on JSON hash
         """
@@ -73,7 +75,8 @@ class Check(object):
             return
 
         try:
-            yield Check(**checks_hash)
+            yield Check(
+                freshness_factor=freshness_factor, **checks_hash)
         except:
             log.info('CHECK: Error on %s' % checks_hash)
             log.debug(traceback.format_exc())

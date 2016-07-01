@@ -29,7 +29,7 @@ Those numbers are tighly related to Elasticsearch cluster performance (benched o
 
 On client side:
   * with 2 checks from each source (diamond trend on 1 metric)
-  * after 1h test time 
+  * after 1h test time
   * 10 seconds global interval
 
 We get:
@@ -94,7 +94,7 @@ Client get data from checks source :
 
 Client keep an internal view on all checks. Push to Tantale Input on a regular basis or triggered from a status change, problems are **immediately reported**.
 
-Tantale sources ensure all checks are pushed to ensure new hosts checks are created. 
+Tantale sources ensure all checks are pushed to ensure new hosts checks are created.
 
 >TOFIX : make a way to ensure new hosts are ok (new checks will be reported if host ok, but new hosts may not appear at all)
 

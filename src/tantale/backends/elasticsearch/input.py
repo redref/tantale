@@ -41,13 +41,18 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             if before == len(self.checks):
                 break
 
-    def freshness_iterator(self, query, timeout, outdated_status, prefix):
+    def freshness_iterator(
+        self, query, outdated_status, prefix, start_time, timeout
+    ):
         """
         Make a scan query then manipulate hits
         Yield on all modified hits
         """
         self.elasticclient.indices.refresh(
             index=self.status_index, ignore_unavailable=True)
+
+        start_time = start_time * 1000
+        now = int(time.time()) * 1000
 
         for hit in helpers.scan(
             self.elasticclient,
@@ -56,6 +61,18 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             query=query,
             scroll="%ss" % timeout,
         ):
+            # Startup grace_time handle
+            if 'last_check' not in hit['_source']:
+                hit['_source']['last_check'] = hit['_source']['timestamp']
+
+            if (
+                hit['_source']['last_check'] < start_time and
+                now < (
+                    start_time + hit['_source']['last_check'] -
+                    hit['_source']['freshness'])
+            ):
+                continue
+
             hit['_op_type'] = 'update'
             hit['doc'] = {}
 
@@ -85,25 +102,19 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             # Forward update to _send_to_logs
             self.logs.append(log)
 
-    def freshness(self, timeout, outdated_status, prefix):
+    def freshness(self, outdated_status, prefix, start_time, timeout):
         """
         Get scroll on outdated, then bulk update it with values
-            timeout : validity time for checks
+            factor : number of intervals to loose
             outdated_status : status to be applied on outdated
             prefix : output prefix to apply on outdated
         """
         try:
-            min_ts = (int(time.time()) - timeout) * 1000
+            now = int(time.time()) * 1000
             search_body = json.dumps({
                 'size': self.batch_size, 'version': True,
                 'filter': {"and": [
-                    {'or': [
-                        {'range': {'last_check': {'lt': min_ts}}},
-                        {'and': [
-                            {'not': {'exists': {'field': 'last_check'}}},
-                            {'range': {'timestamp': {'lt': min_ts}}},
-                        ]},
-                    ]},
+                    {'range': {'freshness': {'lt': now}}},
                     {"not": {"prefix": {"output": prefix}}},
                 ]}
             })
@@ -125,7 +136,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             for res in helpers.streaming_bulk(
                 self.elasticclient,
                 self.freshness_iterator(
-                    search_body, timeout, outdated_status, prefix),
+                    search_body, outdated_status, prefix, start_time, timeout),
                 chunk_size=self.batch_size,
             ):
                 pass
@@ -189,6 +200,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 del doc['_source']
                 del doc['_version']
                 doc['doc']['last_check'] = check.timestamp * 1000
+                doc['doc']['freshness'] = check.freshness * 1000
 
             else:
                 doc['_source'] = {}
@@ -198,7 +210,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                     doc['_parent'] = check.hostname
 
                 for slot in check.fields:
-                    if slot == "timestamp":
+                    if slot in ("timestamp", "freshness"):
                         doc['_source'][slot] = getattr(
                             check, slot, None) * 1000
                     else:

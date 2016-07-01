@@ -8,3 +8,9 @@ LIVESTATUS : host_num_services_*
 TESTS : coverage on excepts/...
 
 INPUT : User behavior, not overwriting, per check...
+
+ALL : tags / environments
+
+ALL : Rest API
+
+INPUT : fix freshness test - not relevant right now

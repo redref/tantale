@@ -105,7 +105,7 @@ class Server(object):
                     self.spawn(processes[-1])
 
                     # Freshness check
-                    if modules[module]['freshness_timeout']:
+                    if modules[module]['freshness_interval'] != '0':
                         processes.append(Process(
                             name="Input_Freshness",
                             target=inputserver.input_freshness,

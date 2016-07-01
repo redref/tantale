@@ -226,7 +226,8 @@ class ElasticsearchTC(TantaleTC):
         Tests checks are push from the past by default
         they all trigger freshness
         """
-        add_config = {"modules": {"Input": {"freshness_timeout": 2}}}
+        add_config = {"modules": {"Input": {
+            "freshness_interval": 1, "freshness_factor": 1}}}
         start = time.time()
         self.InputAndDisplay(bench=self.bench, add_config=add_config)
         live_s = self.getSocket('Livestatus')

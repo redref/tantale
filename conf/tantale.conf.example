@@ -55,19 +55,22 @@ enabled = True
 enabled = True
 # port = 2003
 
-# Maximum time (in seconds) checks are bufferized
-# to fill 'batch' backend size
-# Default : None
-ttl = 5
-
-# Freshness factor
-#   how many interval to wait a check before declaring it 'OUTDATED'
-#   Outdated : status => 1, output prefixed with 'OUTDATED '
-# freshness_timeout = 2
-
 # Maximum number of checks waiting to be processed.
 # When queue is full, new ones are dropped.
 # queue_size = 16384
+
+# Maximum time (in seconds) checks are bufferized
+# to build and fill 'batch' backend size bulk request
+# ttl = 15
+
+# Freshness thread handle making not fresh checks 'OUTDATED'
+#   OUTDATED mean status 2 and message prefixed by "OUTDATED - "
+#   Thread specific parameters:
+# freshness_factor = 2
+#     consider check not fresh after 2 checks intervals (see Client section)
+# freshness_interval = 60
+#     time (in seconds) between each freshness loop
+#     0 to disable freshness thread
 
 [[Client]]
 # enabled = False
