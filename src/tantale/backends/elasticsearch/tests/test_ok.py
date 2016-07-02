@@ -246,7 +246,7 @@ class ElasticsearchTC(TantaleTC):
         time.sleep(1)
 
         # Check freshness changes were logged
-        live_s.send(self.getLivestatusRequest('get_logs'))
+        live_s.send(self.getLivestatusRequest('get_logs_count'))
         res = live_s.recv()
         res = eval(res[16:])
         self.assertTrue(len(res) > 0, "Logs empty")

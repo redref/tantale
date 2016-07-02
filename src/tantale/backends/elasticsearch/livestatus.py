@@ -257,7 +257,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
                 stat_query = copy.deepcopy(es_query)
                 stat_query['filter']['and'].append(self._convert_expr(*stat))
                 self.log.debug(
-                    'Elasticsearch search request : %s' % stat_query)
+                    'Elasticsearch count request : %s' % stat_query)
                 body += json.dumps(stat_query) + "\n"
 
             result = []
@@ -277,7 +277,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             if query.limit:
                 es_query['size'] = query.limit
 
-            self.log.debug('Elasticsearch count request : %s' % es_query)
+            self.log.debug('Elasticsearch search request : %s' % es_query)
 
             body = json.dumps(es_meta) + "\n"
             body += json.dumps(es_query) + "\n"

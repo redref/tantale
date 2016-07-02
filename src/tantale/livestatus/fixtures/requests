@@ -146,6 +146,17 @@ OutputFormat: python
 KeepAlive: on
 ResponseHeader: fixed16
 
+# get_logs_count
+GET log
+Stats: log_time >= 1458322984
+Stats: class = 1
+Stats: class = 3
+StatsOr: 2
+Localtime: 1458337384
+OutputFormat: python
+KeepAlive: on
+ResponseHeader: fixed16
+
 # push_host_downtime
 COMMAND [1458501825] SCHEDULE_HOST_DOWNTIME;%s;1458501825;1483225200;1;0;0;nagiosadmin;s
 
