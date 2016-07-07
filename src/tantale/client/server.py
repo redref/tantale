@@ -54,15 +54,6 @@ class Client(object):
         except:
             self.sock = None
 
-    def close(self):
-        if self.sock:
-            self.sock.shutdown(socket.SHUT_RDWR)
-            self.sock.close()
-        self.sock = None
-
-    def __del__(self):
-        self.close()
-
     def sending_thread(self, res_q):
         """
         Send results from queue
@@ -70,25 +61,29 @@ class Client(object):
         self.connect()
 
         while True:
-
-            result = res_q.get(True)
-            # Not keeping data in memory
-            res_q.task_done()
-
-            if not self.sock:
-                self.connect()
-
-            if not self.sock:
-                self.log.info(
-                    'Reconnect to %s:%s failed' % (self.host, self.port))
-                continue
-
-            self.log.debug("Sending: %s" % result)
-
             try:
-                self.sock.send(bytes(json.dumps(result) + '\n'))
+                result = res_q.get(True)
+                # Not keeping data in memory
+                res_q.task_done()
+
+                if not self.sock:
+                    self.connect()
+
+                if not self.sock:
+                    self.log.info(
+                        'Reconnect to %s:%s failed' % (self.host, self.port))
+                    continue
+
+                self.log.debug("Sending: %s" % result)
+
+                try:
+                    self.sock.send(bytes(json.dumps(result) + '\n'))
+                except:
+                    self.log.info("Connection reset")
+                    self.log.debug(traceback.format_exc())
+                    self.sock = None
             except:
-                self.close()
+                self.log.error("Unknown error sending checks")
 
     def run(self, init_done=None):
         """

@@ -175,7 +175,7 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
         res = self.elasticclient.mget(
             body=json.dumps({"docs": body}),
             index=self.status_index,
-            _source_include=('status', 'ack'),
+            _source_include=('status', 'ack', 'timestamp'),
             refresh=True,
         )
 
@@ -183,17 +183,26 @@ class ElasticsearchBackend(ElasticsearchBaseBackend, Backend):
             check = checks.pop(0)
 
             if 'found' in doc and doc['found'] is True:
+                # Do not erase previous checks with old data
+                if (check.timestamp * 1000) < doc['_source']['timestamp']:
+                    continue
+
                 doc['doc'] = {}
                 doc['_op_type'] = 'update'
                 doc['doc']['output'] = check.output
                 doc['doc']['contacts'] = check.contacts
+                doc['doc']['check'] = check.check
+                doc['doc']['hostname'] = check.hostname
 
                 if check.status != doc['_source']['status']:
                     doc['doc']['status'] = check.status
                     doc['doc']['timestamp'] = check.timestamp * 1000
 
                     # Add a log entry of this change (no ack / last_check)
-                    self.logs.append(doc['doc'])
+                    log = {}
+                    for f in check.log_fields:
+                        log[f] = doc['doc'][f]
+                    self.logs.append(log)
 
                     doc['doc']['ack'] = 0
 

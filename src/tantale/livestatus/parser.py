@@ -222,6 +222,7 @@ class Parser(object):
 
             return keepalive, Query(method, table, **options)
         except:
-            raise Exception(
+            self.log.warning('Livestatus query parse error')
+            self.log.debug(
                 'Error %s\nparsing line "%s" on query "%s"'
                 % (traceback.format_exc(), line, repr(string)))

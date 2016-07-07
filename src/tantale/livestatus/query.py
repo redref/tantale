@@ -162,10 +162,14 @@ class Query(object):
                 # log table specific
                 elif self.table == 'log':
                     if field == 'type':
-                        if result['check'] == 'Host':
-                            mapped_res.append('HOST ALERT')
+                        if 'check' in result:
+                            if result['check'] == 'Host':
+                                mapped_res.append('HOST ALERT')
+                            else:
+                                mapped_res.append('SERVICE ALERT')
                         else:
-                            mapped_res.append('SERVICE ALERT')
+                            self.log.debug("Malformed event line %s" % result)
+                            mapped_res.append('HOST ALERT')
                         continue
 
                 # Append

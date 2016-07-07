@@ -201,11 +201,10 @@ class DiamondSource(BaseSource):
 
         try:
             res = self.read_fifo(self.fifo)
+            if not res:
+                return
         except:
             self.fifo = None
-
-        if not res:
-            return
 
         for line in res.strip().split('\n'):
             try:
@@ -297,11 +296,13 @@ class DiamondSource(BaseSource):
 
     def read_fifo(self, fifo_fd):
         try:
-            res = os.read(fifo_fd, 4096).decode('utf-8')
-            if res != "":
-                return res
-            else:
-                return None
+            res = ""
+            while True:
+                res += os.read(fifo_fd, 4096).decode('utf-8')
+                if res == "":
+                    return None
+                if res[-1] == "\n":
+                    return res
         except BlockingIOError:
             return None
         except Exception as exc:

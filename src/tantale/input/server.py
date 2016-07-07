@@ -82,62 +82,76 @@ class InputServer(object):
 
         # Logic
         queue_state = True
-        stack = ""
-        while self.running:
-            r = None
-            try:
-                r, w, e = select.select(connections, [], [])
-            except:
-                # Handle "Interrupted system call"
-                break
+        stack = {}
 
-            for sock in r:
-                if sock == s:
-                    # New clients
-                    sockfd, addr = s.accept()
-                    connections.append(sockfd)
-                else:
-                    if isinstance(sock, int):
-                        data = os.read(sock, 4096)
+        try:
+            while self.running:
+                r = None
+                try:
+                    r, w, e = select.select(connections, [], [])
+                except:
+                    # Handle "Interrupted system call"
+                    break
+
+                for sock in r:
+                    if sock == s:
+                        # New clients
+                        sockfd, addr = s.accept()
+                        connections.append(sockfd)
                     else:
-                        data = sock.recv(4096)
-
-                    if data == bytes(''):
-                        # Disconnect
-                        connections.remove(sock)
-
-                    data = stack + data.decode('utf-8')
-
-                    while True:
-                        idx = data.find('\n')
-                        if idx == -1:
-                            stack = data
-                            break
-                        line = data[:idx]
-                        data = data[idx + 1:]
-
-                        if line == "END":
-                            break
+                        if isinstance(sock, int):
+                            data = os.read(sock, 4096).decode('utf-8')
+                            key = sock
                         else:
-                            try:
-                                check_queue.put(line, block=False)
-                            except Full:
-                                self.log.error('Queue full, dropping')
-                            except (EOFError, IOError):
-                                # Queue died
-                                self.running = False
-                                queue_state = False
+                            data = sock.recv(4096).decode('utf-8')
+                            key = sock.getpeername()
+
+                        if data == '':
+                            # Disconnect
+                            del stack[key]
+                            connections.remove(sock)
+                            continue
+
+                        if (
+                            data[0] != '{' and
+                            key in stack and stack[key] != ""
+                        ):
+                            data = stack[key] + data.decode('utf-8')
+
+                        while True:
+                            idx = data.find('\n')
+                            if idx == -1:
+                                stack[key] = data
                                 break
+                            line = data[:idx]
+                            data = data[idx + 1:]
 
-        # Stop backend
-        if queue_state:
-            try:
-                check_queue.put(None, block=False)
-            except:
-                pass
+                            if line == "END":
+                                break
+                            else:
+                                try:
+                                    check_queue.put(line, block=False)
+                                except Full:
+                                    self.log.error('Queue full, dropping')
+                                except (EOFError, IOError):
+                                    # Queue died
+                                    self.running = False
+                                    queue_state = False
+                                    break
 
-        s.close()
-        self.log.info("Exit")
+            # Stop backend
+            if queue_state:
+                try:
+                    check_queue.put(None, block=False)
+                except:
+                    pass
+
+            s.close()
+            self.log.info("Exit")
+        except:
+            self.log.critical("Fatal input error")
+            self.log.debug(traceback.format_exc())
+            check_queue.put(None, block=False)
 
     def input_backend(self, check_queue):
         if setproctitle:

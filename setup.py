@@ -64,7 +64,7 @@ if not running_under_virtualenv():
     data_files = [
         ('/etc/tantale', ['conf/tantale.conf.example']),
     ]
-    if os.path.isdir('/usr/lib/systemd'):
+    if os.path.isdir('/usr/lib/systemd/user'):
         # Systemd script
         data_files.append((
             '/usr/lib/systemd/system', ['service/systemd/tantale.service']))
@@ -94,7 +94,7 @@ class TantaleInstallClass(install):
         install.run(self)
 
         if os.path.isfile('/etc/init.d/tantale'):
-            os.lchmod('/etc/init.d/tantale', 755)
+            os.chmod('/etc/init.d/tantale', 755)
 
 setup(
     name='tantale',

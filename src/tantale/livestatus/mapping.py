@@ -10,6 +10,7 @@ KNOWN_FIELDS = (
 FIELDS_MAPPING = {
     "state": "status",
     "name": "hostname",
+    "alias": "hostname",
     "host_name": "hostname",
     "service_description": "check",
     # No address here, only hostnames
