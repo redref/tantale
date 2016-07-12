@@ -298,10 +298,16 @@ class DiamondSource(BaseSource):
         try:
             res = ""
             while True:
-                res += os.read(fifo_fd, 4096).decode('utf-8')
-                if res == "":
-                    return None
-                if res[-1] == "\n":
+                read = os.read(fifo_fd, 4096).decode('utf-8')
+                if read == "":
+                    if res == "":
+                        return None
+                    else:
+                        return res
+
+                res += read
+
+                if len(read) != 4096:
                     return res
         except BlockingIOError:
             return None

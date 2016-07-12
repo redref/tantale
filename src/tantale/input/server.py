@@ -54,7 +54,6 @@ class InputServer(object):
             setproctitle('%s - Input' % getproctitle())
 
         # Open listener
-        connections = []
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -68,11 +67,15 @@ class InputServer(object):
         s.listen(1024)
         self.log.info("Listening on %s" % port)
         init_done.set()
-        connections.append(s)
 
-        # Signals
+        # Create a poller object
+        connections = select.poll()
+        fd_to_socket = {s.fileno(): s}
+        connections.register(s)
+
+        # Signals PIPE
         pipe = os.pipe()
-        connections.append(pipe[0])
+        connections.register(pipe[0])
 
         def sig_handler(signum, frame):
             self.log.debug("%s received" % signum)
@@ -88,20 +91,26 @@ class InputServer(object):
             while self.running:
                 r = None
                 try:
-                    r, w, e = select.select(connections, [], [])
+                    poll_array = connections.poll()
                 except:
                     # Handle "Interrupted system call"
+                    self.log.debug(traceback.format_exc())
                     break
 
-                for sock in r:
-                    if sock == s:
+                for fd, event in poll_array:
+                    sock = fd_to_socket[fd]
+
+                    if sock is s:
                         # New clients
                         sockfd, addr = s.accept()
-                        connections.append(sockfd)
-                    else:
-                        if isinstance(sock, int):
-                            data = os.read(sock, 4096).decode('utf-8')
-                            key = sock
+                        sockfd.setblocking(0)
+                        fd_to_socket[sockfd.fileno()] = sockfd
+                        connections.register(sockfd)
+
+                    elif event & (select.POLLIN | select.POLLPRI):
+                        if isinstance(fd, int):
+                            data = os.read(fd, 4096).decode('utf-8')
+                            key = fd
                         else:
                             data = sock.recv(4096).decode('utf-8')
                             key = sock.getpeername()
@@ -109,7 +118,7 @@ class InputServer(object):
                         if data == '':
                             # Disconnect
                             del stack[key]
-                            connections.remove(sock)
+                            connections.unregister(fd)
                             continue
 
                         if (
@@ -137,7 +146,13 @@ class InputServer(object):
                                     # Queue died
                                     self.running = False
                                     queue_state = False
+                                    self.log.debug(traceback.format_exc())
                                     break
+
+                    elif event & select.POLLHUP:
+                        # Hung up clients
+                        sock.close()
+                        connections.unregister(fd)
 
             # Stop backend
             if queue_state:
