@@ -70,17 +70,14 @@ class InputServer(object):
 
         # Create a poller object
         connections = select.poll()
+        poll_map = select.POLLIN | select.POLLPRI | select.POLLHUP
         fd_to_socket = {s.fileno(): s}
-        connections.register(s)
-
-        # Signals PIPE
-        pipe = os.pipe()
-        connections.register(pipe[0])
+        connections.register(s, poll_map)
 
         def sig_handler(signum, frame):
             self.log.debug("%s received" % signum)
             self.running = False
-            os.write(pipe[1], bytes("END\n"))
+            s.close()
         signal.signal(signal.SIGTERM, sig_handler)
 
         # Logic
@@ -94,26 +91,25 @@ class InputServer(object):
                     poll_array = connections.poll()
                 except:
                     # Handle "Interrupted system call"
-                    self.log.debug(traceback.format_exc())
                     break
 
                 for fd, event in poll_array:
                     sock = fd_to_socket[fd]
 
                     if sock is s:
-                        # New clients
-                        sockfd, addr = s.accept()
-                        sockfd.setblocking(0)
-                        fd_to_socket[sockfd.fileno()] = sockfd
-                        connections.register(sockfd)
+                        if event & select.POLLNVAL:
+                            # Stop server
+                            break
+                        else:
+                            # New clients
+                            sockfd, addr = s.accept()
+                            sockfd.setblocking(0)
+                            fd_to_socket[sockfd.fileno()] = sockfd
+                            connections.register(sockfd, poll_map)
 
                     elif event & (select.POLLIN | select.POLLPRI):
-                        if isinstance(fd, int):
-                            data = os.read(fd, 4096).decode('utf-8')
-                            key = fd
-                        else:
-                            data = sock.recv(4096).decode('utf-8')
-                            key = sock.getpeername()
+                        data = sock.recv(4096).decode('utf-8')
+                        key = sock.getpeername()
 
                         if data == '':
                             # Disconnect
@@ -135,37 +131,20 @@ class InputServer(object):
                             line = data[:idx]
                             data = data[idx + 1:]
 
-                            if line == "END":
-                                break
-                            else:
-                                try:
-                                    check_queue.put(line, block=False)
-                                except Full:
-                                    self.log.error('Queue full, dropping')
-                                except (EOFError, IOError):
-                                    # Queue died
-                                    self.running = False
-                                    queue_state = False
-                                    self.log.debug(traceback.format_exc())
-                                    break
+                            try:
+                                check_queue.put(line, block=False)
+                            except Full:
+                                self.log.error('Queue full, dropping')
 
                     elif event & select.POLLHUP:
                         # Hung up clients
                         sock.close()
                         connections.unregister(fd)
-
-            # Stop backend
-            if queue_state:
-                try:
-                    check_queue.put(None, block=False)
-                except:
-                    pass
-
-            s.close()
-            self.log.info("Exit")
         except:
-            self.log.critical("Fatal input error")
+            self.log.critical("Fatal Input error")
             self.log.debug(traceback.format_exc())
+        finally:
+            self.log.info("Exit")
             check_queue.put(None, block=False)
 
     def input_backend(self, check_queue):

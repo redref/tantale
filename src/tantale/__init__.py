@@ -2,6 +2,6 @@
 
 import os
 
-VERSION = "0.1.7"
+VERSION = "0.1.8"
 
 config_min = os.path.join(os.path.dirname(__file__), 'config_min.conf')

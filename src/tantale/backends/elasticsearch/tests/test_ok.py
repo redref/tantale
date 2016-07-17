@@ -84,8 +84,8 @@ class ElasticsearchTC(TantaleTC):
         Push some checks, then check they got stored
         """
         if bench:
-            hosts_nb = 2000
-            services_per_host = 3
+            hosts_nb = 500
+            services_per_host = 15
         else:
             hosts_nb = 10
             services_per_host = 3
